@@ -23,8 +23,12 @@ class Agent:
         self.gamma = self.config["gamma"]
         self.device = device("cpu")
 
-        self.target_model = Model(self.n_states, self.n_actions).to(self.device)
-        self.eval_model = Model(self.n_states, self.n_actions).to(self.device)
+        self.v_min = self.config["V_min"]
+        self.v_max = self.config["V_max"]
+        self.n_atoms = self.config["N_Atoms"]
+
+        self.eval_model = Model(self.n_states, self.n_actions, self.n_atoms, self.v_min, self.v_max).to(self.device)
+        self.target_model = Model(self.n_states, self.n_actions, self.n_atoms, self.v_min, self.v_max).to(self.device)
         self.target_model.load_state_dict(self.eval_model.state_dict())
 
         self.memory = Memory(self.config["memory_size"])
@@ -41,21 +45,21 @@ class Agent:
         else:
             state = np.expand_dims(state, axis=0)
             state = from_numpy(state).float().to(self.device)
-            return np.argmax(self.eval_model(state).detach().cpu().numpy())
+            return np.argmax(self.eval_model.step(state).detach().cpu().numpy())
 
     def update_train_model(self):
         self.target_model.load_state_dict(self.eval_model.state_dict())
         self.target_model.eval()
 
-    def train(self):
-        if len(self.memory) < self.batch_size:
-            return 0 # as no loss
-        batch = self.memory.sample(self.batch_size)
-        states, actions, rewards, next_states, dones = self.unpack_batch(batch)
-
-
-
-        return dqn_loss
+    # def train(self):
+    #     if len(self.memory) < self.batch_size:
+    #         return 0 # as no loss
+    #     batch = self.memory.sample(self.batch_size)
+    #     states, actions, rewards, next_states, dones = self.unpack_batch(batch)
+    #
+    #
+    #
+    #     return dqn_loss
 
     def run(self):
 
@@ -69,12 +73,12 @@ class Agent:
                 next_state, reward, done, _, = self.env.step(action)
                 episode_reward += reward
                 self.store(state, reward, done, action, next_state)
-                dqn_loss = self.train()
+                # dqn_loss = self.train()
                 if done:
                     break
                 state = next_state
 
-                if (episode * step) % self.target_update_period == 0:
+                if (episode * step) % self.config["hard_update_period"] == 0:
                     self.update_train_model()
 
             self.epsilon = self.epsilon - self.decay_rate if self.epsilon > self.min_epsilon else self.min_epsilon
@@ -87,7 +91,7 @@ class Agent:
             total_global_running_reward.append(global_running_reward)
             if episode % self.config["print_interval"] == 0:
                 print(f"EP:{episode}| "
-                      f"DQN_loss:{dqn_loss:.3f}| "
+                      # f"DQN_loss:{dqn_loss:.3f}| "
                       f"EP_reward:{episode_reward}| "
                       f"EP_running_reward:{global_running_reward:.3f}| "
                       f"Epsilon:{self.epsilon:.2f}| "
