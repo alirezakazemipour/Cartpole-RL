@@ -1,24 +1,40 @@
 import gym
-# from train import Agent
+from agent import Agent
 # from play import Play
 # import matplotlib.pyplot as plt
-# import numpy as np
+import numpy as np
 import time
 
-env_name = "CartPole-v0"
-Intro = True
+config = {
+    "env_name": "CartPole-v0",
+    "do_intro": False,
+    "do_train": True,
+    "lr": 0.001,
+    "batch_size": 64,
+    "memory_size": 100000,
+    "gamma": 0.99,
+    "max_episodes": 15000,
+    "epsilon_decay_rate": 5e-3,
+    "min_epsilon": 0.01,
+    "epsilon": 1.0,
+    "print_interval": 50,
+}
 
-env = gym.make(env_name)
+
+env = gym.make(config["env_name"])
 num_states = env.observation_space.shape[0]
 num_actions = env.action_space.n
 
+config.update({"n_states": num_states,
+               "n_actions": num_actions,
+               "max_steps": env._max_episode_steps})
 
 print("Number of states:{}".format(num_states))
 print("Number of actions:{}".format(num_actions))
 
 
 def test_env_working():
-    test_env = gym.make(env_name)
+    test_env = gym.make(config["env_name"])
     test_env.reset()
     for _ in range(test_env._max_episode_steps):
         test_env.render()
@@ -30,13 +46,13 @@ def test_env_working():
 
 if __name__ == "__main__":
 
-    if Intro:
+    if config["do_intro"]:
         test_env_working()
         print("Environment works.")
         exit(0)
 
-    # agent = Agent(env, num_actions, num_states, num_features)
-    # running_reward = agent.run()
+    agent = Agent(env, **config)
+    running_reward = agent.run()
     #
     # episodes = np.arange(agent.max_episodes)
     # plt.style.use("ggplot")
