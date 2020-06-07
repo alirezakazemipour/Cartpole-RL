@@ -56,15 +56,16 @@ if __name__ == "__main__":
         exit(0)
 
     agent = Agent(env, **config)
-    running_reward = agent.run()
+    if config["do_train"]:
+        running_reward = agent.run()
 
-    episodes = np.arange(agent.max_episodes)
-    plt.style.use("ggplot")
-    plt.figure()
-    plt.plot(episodes, running_reward)
-    plt.savefig("running_reward.png")
-
-    player = Play(env, agent)
-    player.evaluate()
+        episodes = np.arange(agent.max_episodes)
+        plt.style.use("ggplot")
+        plt.figure()
+        plt.plot(episodes, running_reward)
+        plt.savefig("running_reward.png")
+    else:
+        player = Play(env, agent)
+        player.evaluate()
 
 
