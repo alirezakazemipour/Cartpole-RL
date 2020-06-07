@@ -9,7 +9,7 @@ config = {
     "env_name": "CartPole-v0",
     "do_intro": False,
     "do_train": True,
-    "lr": 0.001,
+    "lr": 0.0001,
     "batch_size": 64,
     "hard_update_period": 500,
     "memory_size": 100000,
@@ -18,7 +18,7 @@ config = {
     "epsilon_decay_rate": 5e-3,
     "min_epsilon": 0.01,
     "epsilon": 1.0,
-    "print_interval": 15,
+    "print_interval": 20,
     "V_min": 0,
     "V_max": 200.0,
     "N_Atoms": 51

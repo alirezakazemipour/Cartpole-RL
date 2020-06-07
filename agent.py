@@ -5,6 +5,9 @@ import torch
 from torch import device
 from torch import from_numpy
 from torch.optim import Adam
+import time
+import datetime
+import psutil
 
 
 class Agent:
@@ -21,7 +24,7 @@ class Agent:
         self.max_episodes = self.config["max_episodes"]
         self.batch_size = self.config["batch_size"]
         self.gamma = self.config["gamma"]
-        self.device = device("cuda")
+        self.device = device("cpu")
 
         self.v_min = self.config["V_min"]
         self.v_max = self.config["V_max"]
@@ -37,6 +40,8 @@ class Agent:
 
         self.loss_fn = torch.nn.MSELoss()
         self.optimizer = Adam(self.eval_model.parameters(), lr=self.config["lr"])
+
+        self.to_gb = lambda in_bytes: in_bytes / 1024 / 1024 / 1024
 
     def choose_action(self, state):
 
@@ -68,8 +73,8 @@ class Agent:
             projected_atoms = projected_atoms.clamp_(self.v_min, self.v_max)
 
             b = (projected_atoms - self.v_min) / self.delta_z
-            lower_bound = b.floor_().long()
-            upper_bound = b.ceil_().long()
+            lower_bound = b.floor().long()
+            upper_bound = b.ceil().long()
 
             projected_dist = torch.zeros((self.batch_size, self.n_atoms)).to(self.device)
             for i in range(self.batch_size):
@@ -87,6 +92,7 @@ class Agent:
         total_global_running_reward = []
         global_running_reward = 0
         for episode in range(1, 1 + self.max_episodes):
+            start_time = time.time()
             state = self.env.reset()
             episode_reward = 0
             for step in range(1, 1 + self.max_steps):
@@ -110,13 +116,17 @@ class Agent:
                 global_running_reward = 0.99 * global_running_reward + 0.01 * episode_reward
 
             total_global_running_reward.append(global_running_reward)
+            ram = psutil.virtual_memory()
             if episode % self.config["print_interval"] == 0:
                 print(f"EP:{episode}| "
-                      f"DQN_loss:{dqn_loss:.3f}| "
+                      f"DQN_loss:{dqn_loss:.2f}| "
                       f"EP_reward:{episode_reward}| "
                       f"EP_running_reward:{global_running_reward:.3f}| "
                       f"Epsilon:{self.epsilon:.2f}| "
-                      f"Memory size:{len(self.memory)}")
+                      f"Memory size:{len(self.memory)}| "
+                      f"EP_Duration:{time.time()-start_time:.3f}| "
+                      f"{self.to_gb(ram.used):.1f}/{self.to_gb(ram.total):.1f} GB RAM| "
+                      f'Time:{datetime.datetime.now().strftime("%H:%M:%S")}')
                 self.save_weights()
 
         return total_global_running_reward
