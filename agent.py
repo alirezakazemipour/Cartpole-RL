@@ -24,7 +24,7 @@ class Agent:
         self.max_episodes = self.config["max_episodes"]
         self.batch_size = self.config["batch_size"]
         self.gamma = self.config["gamma"]
-        self.device = device("cpu")
+        self.device = device(self.config["device"])
 
         self.v_min = self.config["V_min"]
         self.v_max = self.config["V_max"]

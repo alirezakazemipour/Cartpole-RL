@@ -14,14 +14,15 @@ config = {
     "hard_update_period": 500,
     "memory_size": 10000,
     "gamma": 0.99,
-    "max_episodes": 2000,
+    "max_episodes": 200,
     "epsilon_decay_rate": 2e-2,
     "min_epsilon": 0.01,
     "epsilon": 1.0,
-    "print_interval": 20,
+    "print_interval": 50,
     "V_min": 0,
     "V_max": 200.0,
-    "N_Atoms": 51
+    "N_Atoms": 51,
+    "device": "cpu"
 }
 
 
