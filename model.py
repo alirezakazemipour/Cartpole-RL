@@ -11,9 +11,9 @@ class Model(nn.Module):
         self.n_atoms = n_atoms
         self.support = support
 
-        self.fc1 = nn.Linear(self.n_states, 256)
-        self.fc2 = nn.Linear(256, 128)
-        self.mass_probs = nn.Linear(128, self.n_actions * self.n_atoms)
+        self.fc1 = nn.Linear(self.n_states, 128)
+        self.fc2 = nn.Linear(128, 256)
+        self.mass_probs = nn.Linear(256, self.n_actions * self.n_atoms)
 
         nn.init.kaiming_normal_(self.fc1.weight)
         self.fc1.bias.data.zero_()

@@ -38,7 +38,6 @@ class Agent:
 
         self.memory = Memory(self.config["memory_size"])
 
-        self.loss_fn = torch.nn.MSELoss()
         self.optimizer = Adam(self.eval_model.parameters(), lr=self.config["lr"])
 
         self.to_gb = lambda in_bytes: in_bytes / 1024 / 1024 / 1024
@@ -65,9 +64,9 @@ class Agent:
         states, actions, rewards, next_states, dones = self.unpack_batch(batch)
 
         with torch.no_grad():
-            q_next = self.eval_model.get_q_value(next_states)
-            selected_actions = torch.argmax(q_next, dim=-1).unsqueeze(-1)
-            q_next = q_next.gather(-1, selected_actions)
+            q_next = self.target_model.get_q_value(next_states)
+            selected_actions = torch.argmax(q_next, dim=-1)
+            q_next = self.target_model(next_states)[range(self.batch_size), selected_actions.long()]
 
             projected_atoms = rewards + self.config["gamma"] * self.support * (1 - dones)
             projected_atoms = projected_atoms.clamp_(self.v_min, self.v_max)
@@ -82,8 +81,12 @@ class Agent:
                     projected_dist[i, lower_bound[i, j]] += (q_next * (upper_bound - b))[i, j]
                     projected_dist[i, upper_bound[i, j]] += (q_next * (b - lower_bound))[i, j]
 
-        eval_dist = self.eval_model(states)[range(self.batch_size), actions.long()]
+        eval_dist = self.eval_model(states)[range(self.batch_size), actions.squeeze().long()]
         dqn_loss = - (projected_dist * torch.log(eval_dist)).sum(-1).mean()
+
+        self.optimizer.zero_grad()
+        dqn_loss.backward()
+        self.optimizer.step()
 
         return dqn_loss.detach().cpu().numpy()
 
@@ -108,7 +111,7 @@ class Agent:
                 if (episode * step) % self.config["hard_update_period"] == 0:
                     self.update_train_model()
 
-            self.epsilon = self.epsilon - self.decay_rate if self.epsilon > self.min_epsilon else self.min_epsilon
+            self.epsilon = self.epsilon - self.decay_rate if self.epsilon > self.min_epsilon + self.decay_rate else self.min_epsilon
 
             if episode == 1:
                 global_running_reward = episode_reward

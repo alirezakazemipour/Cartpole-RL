@@ -1,7 +1,7 @@
 import gym
 from agent import Agent
-# from play import Play
-# import matplotlib.pyplot as plt
+from play import Play
+import matplotlib.pyplot as plt
 import numpy as np
 import time
 
@@ -12,10 +12,10 @@ config = {
     "lr": 0.0001,
     "batch_size": 64,
     "hard_update_period": 500,
-    "memory_size": 100000,
+    "memory_size": 10000,
     "gamma": 0.99,
-    "max_episodes": 15000,
-    "epsilon_decay_rate": 5e-3,
+    "max_episodes": 2000,
+    "epsilon_decay_rate": 2e-2,
     "min_epsilon": 0.01,
     "epsilon": 1.0,
     "print_interval": 20,
@@ -57,14 +57,14 @@ if __name__ == "__main__":
 
     agent = Agent(env, **config)
     running_reward = agent.run()
-    #
-    # episodes = np.arange(agent.max_episodes)
-    # plt.style.use("ggplot")
-    # plt.figure()
-    # plt.plot(episodes, running_reward)
-    # plt.savefig("running_reward.png")
-    #
-    # player = Play(env, agent)
-    # player.evaluate()
+
+    episodes = np.arange(agent.max_episodes)
+    plt.style.use("ggplot")
+    plt.figure()
+    plt.plot(episodes, running_reward)
+    plt.savefig("running_reward.png")
+
+    player = Play(env, agent)
+    player.evaluate()
 
 
