@@ -4,12 +4,12 @@ import torch
 
 
 class Model(nn.Module):
-    def __init__(self, n_states, n_actions, n_atoms, v_min, v_max):
+    def __init__(self, n_states, n_actions, n_atoms, support):
         super(Model, self).__init__()
         self.n_states = n_states
         self.n_actions = n_actions
         self.n_atoms = n_atoms
-        self.support = torch.linspace(v_min, v_max, n_atoms)
+        self.support = support
 
         self.fc1 = nn.Linear(self.n_states, 256)
         self.fc2 = nn.Linear(256, 128)
@@ -27,9 +27,10 @@ class Model(nn.Module):
         x = inputs
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        return self.mass_probs(x)
+        return F.softmax(self.mass_probs(x).view(-1, self.n_actions, self.n_atoms),
+                         dim=-1)  # (Batch size, N_Actions, N_Atoms)
 
-    def step(self, x):
-        dist = F.softmax(self(x).view(self.n_actions, self.n_atoms), dim=-1)
-        q_values = (dist * self.support).sum(dim=-1)
+    def get_q_value(self, x):
+        dist = self(x)
+        q_values = (dist * self.support).sum(dim=-1)  # (Batch size, N_Actions)
         return q_values

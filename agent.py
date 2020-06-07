@@ -21,14 +21,16 @@ class Agent:
         self.max_episodes = self.config["max_episodes"]
         self.batch_size = self.config["batch_size"]
         self.gamma = self.config["gamma"]
-        self.device = device("cpu")
+        self.device = device("cuda")
 
         self.v_min = self.config["V_min"]
         self.v_max = self.config["V_max"]
         self.n_atoms = self.config["N_Atoms"]
+        self.support = torch.linspace(self.v_min, self.v_max, self.n_atoms).to(self.device)
+        self.delta_z = (self.v_max - self.v_min) / (self.n_atoms - 1)
 
-        self.eval_model = Model(self.n_states, self.n_actions, self.n_atoms, self.v_min, self.v_max).to(self.device)
-        self.target_model = Model(self.n_states, self.n_actions, self.n_atoms, self.v_min, self.v_max).to(self.device)
+        self.eval_model = Model(self.n_states, self.n_actions, self.n_atoms, self.support).to(self.device)
+        self.target_model = Model(self.n_states, self.n_actions, self.n_atoms, self.support).to(self.device)
         self.target_model.load_state_dict(self.eval_model.state_dict())
 
         self.memory = Memory(self.config["memory_size"])
@@ -45,21 +47,40 @@ class Agent:
         else:
             state = np.expand_dims(state, axis=0)
             state = from_numpy(state).float().to(self.device)
-            return np.argmax(self.eval_model.step(state).detach().cpu().numpy())
+            return np.argmax(self.eval_model.get_q_value(state).detach().cpu().numpy())
 
     def update_train_model(self):
         self.target_model.load_state_dict(self.eval_model.state_dict())
         self.target_model.eval()
 
-    # def train(self):
-    #     if len(self.memory) < self.batch_size:
-    #         return 0 # as no loss
-    #     batch = self.memory.sample(self.batch_size)
-    #     states, actions, rewards, next_states, dones = self.unpack_batch(batch)
-    #
-    #
-    #
-    #     return dqn_loss
+    def train(self):
+        if len(self.memory) < self.batch_size:
+            return 0  # as no loss
+        batch = self.memory.sample(self.batch_size)
+        states, actions, rewards, next_states, dones = self.unpack_batch(batch)
+
+        with torch.no_grad():
+            q_next = self.eval_model.get_q_value(next_states)
+            selected_actions = torch.argmax(q_next, dim=-1).unsqueeze(-1)
+            q_next = q_next.gather(-1, selected_actions)
+
+            projected_atoms = rewards + self.config["gamma"] * self.support * (1 - dones)
+            projected_atoms = projected_atoms.clamp_(self.v_min, self.v_max)
+
+            b = (projected_atoms - self.v_min) / self.delta_z
+            lower_bound = b.floor_().long()
+            upper_bound = b.ceil_().long()
+
+            projected_dist = torch.zeros((self.batch_size, self.n_atoms)).to(self.device)
+            for i in range(self.batch_size):
+                for j in range(self.n_atoms):
+                    projected_dist[i, lower_bound[i, j]] += (q_next * (upper_bound - b))[i, j]
+                    projected_dist[i, upper_bound[i, j]] += (q_next * (b - lower_bound))[i, j]
+
+        eval_dist = self.eval_model(states)[range(self.batch_size), actions.long()]
+        dqn_loss = - (projected_dist * torch.log(eval_dist)).sum(-1).mean()
+
+        return dqn_loss.detach().cpu().numpy()
 
     def run(self):
 
@@ -73,7 +94,7 @@ class Agent:
                 next_state, reward, done, _, = self.env.step(action)
                 episode_reward += reward
                 self.store(state, reward, done, action, next_state)
-                # dqn_loss = self.train()
+                dqn_loss = self.train()
                 if done:
                     break
                 state = next_state
@@ -91,7 +112,7 @@ class Agent:
             total_global_running_reward.append(global_running_reward)
             if episode % self.config["print_interval"] == 0:
                 print(f"EP:{episode}| "
-                      # f"DQN_loss:{dqn_loss:.3f}| "
+                      f"DQN_loss:{dqn_loss:.3f}| "
                       f"EP_reward:{episode_reward}| "
                       f"EP_running_reward:{global_running_reward:.3f}| "
                       f"Epsilon:{self.epsilon:.2f}| "
@@ -114,9 +135,9 @@ class Agent:
 
         states = torch.cat(batch.state).to(self.device).view(self.batch_size, self.n_states)
         actions = torch.cat(batch.action).to(self.device)
-        rewards = torch.cat(batch.reward).to(self.device)
+        rewards = torch.cat(batch.reward).to(self.device).view(-1, 1)
         next_states = torch.cat(batch.next_state).to(self.device).view(self.batch_size, self.n_states)
-        dones = torch.cat(batch.done).to(self.device)
+        dones = torch.cat(batch.done).to(self.device).view(-1, 1)
         actions = actions.view((-1, 1))
         return states, actions, rewards, next_states, dones
 

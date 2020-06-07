@@ -18,7 +18,7 @@ config = {
     "epsilon_decay_rate": 5e-3,
     "min_epsilon": 0.01,
     "epsilon": 1.0,
-    "print_interval": 50,
+    "print_interval": 15,
     "V_min": 0,
     "V_max": 200.0,
     "N_Atoms": 51
