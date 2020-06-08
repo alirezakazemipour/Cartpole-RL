@@ -20,7 +20,10 @@ config = {
     "epsilon": 1.0,
     "print_interval": 50,
     "device": "cpu",
-    "n_step": 3
+    "n_step": 3,
+    "V_min": 0,
+    "V_max": 200.0,
+    "N_Atoms": 51,
 }
 
 

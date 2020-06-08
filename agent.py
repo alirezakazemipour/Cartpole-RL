@@ -29,8 +29,14 @@ class Agent:
         self.device = device(self.config["device"])
         self.to_gb = lambda in_bytes: in_bytes / 1024 / 1024 / 1024
 
-        self.eval_model = Model(self.n_states, self.n_actions).to(self.device)
-        self.target_model = Model(self.n_states, self.n_actions).to(self.device)
+        self.v_min = self.config["V_min"]
+        self.v_max = self.config["V_max"]
+        self.n_atoms = self.config["N_Atoms"]
+        self.support = torch.linspace(self.v_min, self.v_max, self.n_atoms).to(self.device)
+        self.delta_z = (self.v_max - self.v_min) / (self.n_atoms - 1)
+
+        self.eval_model = Model(self.n_states, self.n_actions, self.n_atoms, self.support).to(self.device)
+        self.target_model = Model(self.n_states, self.n_actions, self.n_atoms, self.support).to(self.device)
         self.target_model.load_state_dict(self.eval_model.state_dict())
 
         self.loss_fn = torch.nn.MSELoss()
@@ -47,7 +53,7 @@ class Agent:
         else:
             state = np.expand_dims(state, axis=0)
             state = from_numpy(state).float().to(self.device)
-            return np.argmax(self.eval_model(state).detach().cpu().numpy())
+            return np.argmax(self.eval_model.get_q_value(state).detach().cpu().numpy())
 
     def update_train_model(self):
         self.target_model.load_state_dict(self.eval_model.state_dict())
@@ -59,16 +65,28 @@ class Agent:
         batch = self.memory.sample(self.batch_size)
         states, actions, rewards, next_states, dones = self.unpack_batch(batch)
 
-        q_eval = self.eval_model(states).gather(dim=-1, index=actions.long())
         with torch.no_grad():
-            q_next = self.target_model(next_states)
-            q_eval_next = self.eval_model(next_states)
+            q_next = self.target_model.get_q_value(next_states)
+            q_eval_next = self.eval_model.get_q_value(next_states)
 
-            next_actions = q_eval_next.argmax(dim=-1).view(-1, 1)
-            q_next = q_next.gather(dim=-1, index=next_actions.long())
-            q_target = rewards + (self.gamma ** self.config["n_step"]) * q_next * (1 - dones)
-            
-        dqn_loss = self.loss_fn(q_eval, q_target)
+            next_actions = q_eval_next.argmax(dim=-1)
+            q_next = q_next[range(self.batch_size), next_actions.long()]
+
+            projected_atoms = rewards + (self.config["gamma"] ** self.config["n_step"]) * self.support * (1 - dones)
+            projected_atoms = projected_atoms.clamp_(self.v_min, self.v_max)
+
+            b = (projected_atoms - self.v_min) / self.delta_z
+            lower_bound = b.floor().long()
+            upper_bound = b.ceil().long()
+
+            projected_dist = torch.zeros((self.batch_size, self.n_atoms)).to(self.device)
+            for i in range(self.batch_size):
+                for j in range(self.n_atoms):
+                    projected_dist[i, lower_bound[i, j]] += (q_next * (upper_bound - b))[i, j]
+                    projected_dist[i, upper_bound[i, j]] += (q_next * (b - lower_bound))[i, j]
+
+        eval_dist = self.eval_model(states)[range(self.batch_size), actions.squeeze().long()]
+        dqn_loss = - (projected_dist * torch.log(eval_dist)).sum(-1).mean()
 
         self.optimizer.zero_grad()
         dqn_loss.backward()
