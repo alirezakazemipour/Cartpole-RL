@@ -29,20 +29,17 @@ class Agent:
         self.device = device(self.config["device"])
         self.to_gb = lambda in_bytes: in_bytes / 1024 / 1024 / 1024
 
+        self.eval_model = Model(self.n_states, self.n_actions, self.n_atoms, self.support).to(self.device)
+        self.target_model = Model(self.n_states, self.n_actions, self.n_atoms, self.support).to(self.device)
+        self.target_model.load_state_dict(self.eval_model.state_dict())
+        self.optimizer = Adam(self.eval_model.parameters(), lr=self.config["lr"])
+
+        self.n_step_buffer = deque(maxlen=self.config["n_step"])
         self.v_min = self.config["V_min"]
         self.v_max = self.config["V_max"]
         self.n_atoms = self.config["N_Atoms"]
         self.support = torch.linspace(self.v_min, self.v_max, self.n_atoms).to(self.device)
         self.delta_z = (self.v_max - self.v_min) / (self.n_atoms - 1)
-
-        self.eval_model = Model(self.n_states, self.n_actions, self.n_atoms, self.support).to(self.device)
-        self.target_model = Model(self.n_states, self.n_actions, self.n_atoms, self.support).to(self.device)
-        self.target_model.load_state_dict(self.eval_model.state_dict())
-
-        self.loss_fn = torch.nn.MSELoss()
-        self.optimizer = Adam(self.eval_model.parameters(), lr=self.config["lr"])
-
-        self.n_step_buffer = deque(maxlen=self.config["n_step"])
 
     def choose_action(self, state):
 
@@ -129,7 +126,8 @@ class Agent:
                       f"EP_running_reward:{global_running_reward:.3f}| "
                       f"Epsilon:{self.epsilon:.2f}| "
                       f"Memory size:{len(self.memory)}| "
-                      f"EP_Duration:{time.time()-start_time:.3f}| "
+                      f"EP_Duration:{time.time()-start_time:.3f}|"
+                      f"Step:{step}|  "
                       f"{self.to_gb(ram.used):.1f}/{self.to_gb(ram.total):.1f} GB RAM| "
                       f'Time:{datetime.datetime.now().strftime("%H:%M:%S")}')
                 self.save_weights()
