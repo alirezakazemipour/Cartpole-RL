@@ -66,11 +66,9 @@ class Agent:
         states, actions, rewards, next_states, dones = self.unpack_batch(batch)
 
         with torch.no_grad():
-            q_next = self.target_model.get_q_value(next_states)
             q_eval_next = self.eval_model.get_q_value(next_states)
-
             next_actions = q_eval_next.argmax(dim=-1)
-            q_next = q_next[range(self.batch_size), next_actions.long()]
+            q_next = self.target_model(next_states)[range(self.batch_size), next_actions.long()]
 
             projected_atoms = rewards + (self.config["gamma"] ** self.config["n_step"]) * self.support * (1 - dones)
             projected_atoms = projected_atoms.clamp_(self.v_min, self.v_max)
