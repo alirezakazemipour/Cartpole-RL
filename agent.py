@@ -8,6 +8,7 @@ from torch.optim import Adam
 import time
 import datetime
 import psutil
+from collections import deque
 
 
 class Agent:
@@ -26,6 +27,7 @@ class Agent:
         self.gamma = self.config["gamma"]
         self.memory = Memory(self.config["memory_size"])
         self.device = device(self.config["device"])
+        self.to_gb = lambda in_bytes: in_bytes / 1024 / 1024 / 1024
 
         self.eval_model = Model(self.n_states, self.n_actions).to(self.device)
         self.target_model = Model(self.n_states, self.n_actions).to(self.device)
@@ -34,7 +36,7 @@ class Agent:
         self.loss_fn = torch.nn.MSELoss()
         self.optimizer = Adam(self.eval_model.parameters(), lr=self.config["lr"])
 
-        self.to_gb = lambda in_bytes: in_bytes / 1024 / 1024 / 1024
+        self.n_step_buffer = deque(maxlen=self.config["n_step"])
 
     def choose_action(self, state):
 
@@ -64,7 +66,7 @@ class Agent:
 
             next_actions = q_eval_next.argmax(dim=-1).view(-1, 1)
             q_next = q_next.gather(dim=-1, index=next_actions.long())
-            q_target = rewards + self.gamma * q_next * (1 - dones)
+            q_target = rewards + (self.gamma ** self.config["n_step"]) * q_next * (1 - dones)
             
         dqn_loss = self.loss_fn(q_eval, q_target)
 
@@ -119,6 +121,12 @@ class Agent:
         return total_global_running_reward
 
     def store(self, state, reward, done, action, next_state):
+        self.n_step_buffer.append((state, action, reward, next_state, done))
+        if len(self.n_step_buffer) < self.config["n_step"]:
+            return
+        reward, next_state, done = self.n_step_returns()
+        state, action, _, _, _ = self.n_step_buffer.pop()
+
         state = from_numpy(state).float().to(self.device)
         reward = torch.Tensor([reward]).to(self.device)
         done = torch.Tensor([done]).to(self.device)
@@ -146,3 +154,14 @@ class Agent:
 
     def set_to_eval_mode(self):
         self.eval_model.eval()
+
+    def n_step_returns(self):
+        reward, next_state, done = self.n_step_buffer[-1][-3:]
+
+        for transition in reversed(list(self.n_step_buffer)[:-1]):
+            r, n_s, d = transition[-3:]
+
+            reward = r + self.config["gamma"] * reward * (1 - d)
+            next_state, done = (n_s, d) if d else (next_state, done)
+
+        return reward, next_state, done

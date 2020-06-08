@@ -19,7 +19,8 @@ config = {
     "min_epsilon": 0.01,
     "epsilon": 1.0,
     "print_interval": 50,
-    "device": "cpu"
+    "device": "cpu",
+    "n_step": 3
 }
 
 
@@ -31,8 +32,9 @@ config.update({"n_states": num_states,
                "n_actions": num_actions,
                "max_steps": env._max_episode_steps})
 
-print("Number of states:{}".format(num_states))
-print("Number of actions:{}".format(num_actions))
+print("Environment is: {}".format(config["env_name"]))
+print("Number of states: {}".format(num_states))
+print("Number of actions: {}".format(num_actions))
 
 
 def test_env_working():
