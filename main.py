@@ -19,9 +19,6 @@ config = {
     "min_epsilon": 0.01,
     "epsilon": 1.0,
     "print_interval": 50,
-    "V_min": 0,
-    "V_max": 200.0,
-    "N_Atoms": 51,
     "device": "cpu"
 }
 
