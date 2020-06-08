@@ -24,20 +24,14 @@ class Agent:
         self.max_episodes = self.config["max_episodes"]
         self.batch_size = self.config["batch_size"]
         self.gamma = self.config["gamma"]
+        self.memory = Memory(self.config["memory_size"])
         self.device = device(self.config["device"])
 
-        self.v_min = self.config["V_min"]
-        self.v_max = self.config["V_max"]
-        self.n_atoms = self.config["N_Atoms"]
-        self.support = torch.linspace(self.v_min, self.v_max, self.n_atoms).to(self.device)
-        self.delta_z = (self.v_max - self.v_min) / (self.n_atoms - 1)
-
-        self.eval_model = Model(self.n_states, self.n_actions, self.n_atoms, self.support).to(self.device)
-        self.target_model = Model(self.n_states, self.n_actions, self.n_atoms, self.support).to(self.device)
+        self.eval_model = Model(self.n_states, self.n_actions).to(self.device)
+        self.target_model = Model(self.n_states, self.n_actions).to(self.device)
         self.target_model.load_state_dict(self.eval_model.state_dict())
 
-        self.memory = Memory(self.config["memory_size"])
-
+        self.loss_fn = torch.nn.MSELoss()
         self.optimizer = Adam(self.eval_model.parameters(), lr=self.config["lr"])
 
         self.to_gb = lambda in_bytes: in_bytes / 1024 / 1024 / 1024
@@ -51,7 +45,7 @@ class Agent:
         else:
             state = np.expand_dims(state, axis=0)
             state = from_numpy(state).float().to(self.device)
-            return np.argmax(self.eval_model.get_q_value(state).detach().cpu().numpy())
+            return np.argmax(self.eval_model(state).detach().cpu().numpy())
 
     def update_train_model(self):
         self.target_model.load_state_dict(self.eval_model.state_dict())
@@ -63,26 +57,11 @@ class Agent:
         batch = self.memory.sample(self.batch_size)
         states, actions, rewards, next_states, dones = self.unpack_batch(batch)
 
-        with torch.no_grad():
-            q_next = self.target_model.get_q_value(next_states)
-            selected_actions = torch.argmax(q_next, dim=-1)
-            q_next = self.target_model(next_states)[range(self.batch_size), selected_actions.long()]
+        q_next = self.target_model(next_states).detach().max(dim=-1)[0].view(self.batch_size, 1)
 
-            projected_atoms = rewards + self.config["gamma"] * self.support * (1 - dones)
-            projected_atoms = projected_atoms.clamp_(self.v_min, self.v_max)
-
-            b = (projected_atoms - self.v_min) / self.delta_z
-            lower_bound = b.floor().long()
-            upper_bound = b.ceil().long()
-
-            projected_dist = torch.zeros((self.batch_size, self.n_atoms)).to(self.device)
-            for i in range(self.batch_size):
-                for j in range(self.n_atoms):
-                    projected_dist[i, lower_bound[i, j]] += (q_next * (upper_bound - b))[i, j]
-                    projected_dist[i, upper_bound[i, j]] += (q_next * (b - lower_bound))[i, j]
-
-        eval_dist = self.eval_model(states)[range(self.batch_size), actions.squeeze().long()]
-        dqn_loss = - (projected_dist * torch.log(eval_dist)).sum(-1).mean()
+        q_eval = self.eval_model(states).gather(dim=-1, index=actions.long())
+        q_target = rewards + self.gamma * q_next * (1 - dones)
+        dqn_loss = self.loss_fn(q_eval, q_target)
 
         self.optimizer.zero_grad()
         dqn_loss.backward()
