@@ -6,13 +6,13 @@ import numpy as np
 import time
 
 config = {
-    "env_name": "CartPole-v0",
+    "env_name": "Breakout-ram-v0",
     "do_intro": False,
     "do_train": True,
     "lr": 0.0001,
     "batch_size": 64,
     "hard_update_period": 500,
-    "memory_size": 10000,
+    "memory_size": 15000,
     "gamma": 0.99,
     "max_episodes": 2000,
     "epsilon_decay_rate": 5e-2,

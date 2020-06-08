@@ -10,9 +10,9 @@ class Model(nn.Module):
         self.n_atoms = n_atoms
         self.support = support
 
-        self.fc1 = nn.Linear(self.n_states, 128)
-        self.adv_fc = nn.Linear(128, 256)
-        self.value_fc = nn.Linear(128, 256)
+        self.fc1 = nn.Linear(self.n_states, 256)
+        self.adv_fc = nn.Linear(256, 256)
+        self.value_fc = nn.Linear(256, 256)
         self.adv = nn.Linear(256, self.n_actions * self.n_atoms)
         self.value = nn.Linear(256, self.n_atoms)
 
@@ -37,7 +37,7 @@ class Model(nn.Module):
         value = self.value(value_fc).view(-1, 1, self.n_atoms)
 
         mass_probs = value + adv - adv.mean(1, keepdim=True)
-        return F.softmax(mass_probs, dim=-1)
+        return F.softmax(mass_probs, dim=-1).clamp(min=1e-3)
 
     def get_q_value(self, x):
         dist = self(x)
