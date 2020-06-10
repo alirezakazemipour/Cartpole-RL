@@ -6,7 +6,7 @@ import numpy as np
 import time
 
 config = {
-    "env_name": "Breakout-ram-v0",
+    "env_name": "CartPole-v0",
     "do_intro": False,
     "do_train": True,
     "lr": 0.0001,
