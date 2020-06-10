@@ -15,9 +15,6 @@ config = {
     "memory_size": 10000,
     "gamma": 0.99,
     "max_episodes": 2000,
-    # "epsilon_decay_rate": 5e-3,
-    # "min_epsilon": 0.01,
-    # "epsilon": 1.0,
     "print_interval": 50,
     "device": "cpu"
 }
