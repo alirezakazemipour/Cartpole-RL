@@ -16,9 +16,6 @@ class Agent:
 
         self.config = config
         self.env = env
-        self.epsilon = self.config["epsilon"]
-        self.min_epsilon = self.config["min_epsilon"]
-        self.decay_rate = self.config["epsilon_decay_rate"]
         self.n_actions = self.config["n_actions"]
         self.n_states = self.config["n_states"]
         self.max_steps = self.config["max_steps"]
@@ -41,18 +38,10 @@ class Agent:
         self.target_model.load_state_dict(self.eval_model.state_dict())
         self.optimizer = Adam(self.eval_model.parameters(), lr=self.config["lr"])
 
-
-
     def choose_action(self, state):
-
-        exp = np.random.rand()
-        if self.epsilon > exp:
-            return np.random.randint(self.n_actions)
-
-        else:
-            state = np.expand_dims(state, axis=0)
-            state = from_numpy(state).float().to(self.device)
-            return np.argmax(self.eval_model.get_q_value(state).detach().cpu().numpy())
+        state = np.expand_dims(state, axis=0)
+        state = from_numpy(state).float().to(self.device)
+        return np.argmax(self.eval_model.get_q_value(state).detach().cpu().numpy())
 
     def update_train_model(self):
         self.target_model.load_state_dict(self.eval_model.state_dict())
@@ -89,6 +78,9 @@ class Agent:
         dqn_loss.backward()
         self.optimizer.step()
 
+        self.target_model.reset()
+        self.eval_model.reset()
+
         return dqn_loss.detach().cpu().numpy()
 
     def run(self):
@@ -112,8 +104,6 @@ class Agent:
                 if (episode * step) % self.config["hard_update_period"] == 0:
                     self.update_train_model()
 
-            self.epsilon = self.epsilon - self.decay_rate if self.epsilon > self.min_epsilon + self.decay_rate else self.min_epsilon
-
             if episode == 1:
                 global_running_reward = episode_reward
             else:
@@ -126,7 +116,6 @@ class Agent:
                       f"DQN_loss:{dqn_loss:.2f}| "
                       f"EP_reward:{episode_reward}| "
                       f"EP_running_reward:{global_running_reward:.3f}| "
-                      f"Epsilon:{self.epsilon:.2f}| "
                       f"Memory size:{len(self.memory)}| "
                       f"EP_Duration:{time.time()-start_time:.3f}| "
                       f"Step:{step}| "
