@@ -21,6 +21,8 @@ config = {
     "V_min": 0,
     "V_max": 200.0,
     "N_Atoms": 51,
+    "alpha": 0.6,
+    "beta": 0.4
 }
 
 
