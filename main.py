@@ -14,7 +14,7 @@ config = {
     "hard_update_period": 500,
     "memory_size": 15000,
     "gamma": 0.99,
-    "max_episodes": 2000,
+    "max_episodes": 500,
     "print_interval": 10,
     "device": "cpu",
     "n_step": 3,
@@ -69,5 +69,3 @@ if __name__ == "__main__":
     else:
         player = Play(env, agent)
         player.evaluate()
-
-

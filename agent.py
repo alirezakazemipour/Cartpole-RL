@@ -43,9 +43,15 @@ class Agent:
         state = from_numpy(state).float().to(self.device)
         return np.argmax(self.eval_model.get_q_value(state).detach().cpu().numpy())
 
-    def update_train_model(self):
+    def hard_update_target_model(self):
         self.target_model.load_state_dict(self.eval_model.state_dict())
         self.target_model.eval()
+
+    @staticmethod
+    def soft_update_of_target_network(local_model, target_model, tau=0.001):
+        for target_param, local_param in zip(target_model.parameters(), local_model.parameters()):
+            target_param.data.copy_(tau * local_param.data + (1.0 - tau) * target_param.data)
+        target_model.eval()
 
     def train(self, beta):
         if len(self.memory) < self.batch_size:
@@ -109,7 +115,8 @@ class Agent:
                 state = next_state
 
                 if (episode * step) % self.config["hard_update_period"] == 0:
-                    self.update_train_model()
+                    self.hard_update_target_model()
+                # self.soft_update_of_target_network(self.eval_model, self.target_model, tau=0.05)
 
             if episode == 1:
                 global_running_reward = episode_reward
