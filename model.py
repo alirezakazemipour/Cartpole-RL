@@ -1,6 +1,5 @@
 from torch import nn
 import torch.nn.functional as F
-import torch
 
 
 class Model(nn.Module):
@@ -12,25 +11,34 @@ class Model(nn.Module):
         self.support = support
 
         self.fc1 = nn.Linear(self.n_states, 128)
-        self.fc2 = nn.Linear(128, 256)
-        self.mass_probs = nn.Linear(256, self.n_actions * self.n_atoms)
+        self.adv_fc = nn.Linear(128, 512)
+        self.adv = nn.Linear(512, self.n_actions * self.n_atoms)
 
-        nn.init.kaiming_normal_(self.fc1.weight)
-        self.fc1.bias.data.zero_()
-        nn.init.kaiming_normal_(self.fc2.weight)
-        self.fc2.bias.data.data.zero_()
+        self.value_fc = nn.Linear(128, 512)
+        self.value = nn.Linear(512, self.n_atoms)
 
-        nn.init.xavier_uniform_(self.mass_probs.weight)
-        self.mass_probs.bias.data.zero_()
+        nn.init.kaiming_normal_(self.adv_fc.weight, nonlinearity="relu")
+        self.adv_fc.bias.data.zero_()
+        nn.init.xavier_uniform_(self.adv.weight)
+        self.adv.bias.data.zero_()
+
+        nn.init.kaiming_normal_(self.value_fc.weight, nonlinearity="relu")
+        self.value_fc.bias.data.zero_()
+        nn.init.xavier_uniform_(self.value.weight)
+        self.value.bias.data.zero_()
 
     def forward(self, inputs):
         x = inputs
         x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return F.softmax(self.mass_probs(x).view(-1, self.n_actions, self.n_atoms),
-                         dim=-1)  # (Batch size, N_Actions, N_Atoms)
+        adv_fc = F.relu(self.adv_fc(x))
+        adv = self.adv(adv_fc).view(-1, self.n_actions, self.n_atoms)
+        value_fc = F.relu(self.value_fc(x))
+        value = self.value(value_fc).view(-1, 1, self.n_atoms)
+
+        mass_probs = value + adv - adv.mean(1, keepdim=True)
+        return F.softmax(mass_probs, dim=-1).clamp(min=1e-3)
 
     def get_q_value(self, x):
         dist = self(x)
-        q_values = (dist * self.support).sum(dim=-1)  # (Batch size, N_Actions)
-        return q_values
+        q_value = (dist * self.support).sum(-1)
+        return q_value

@@ -94,6 +94,7 @@ class Agent:
 
         self.optimizer.zero_grad()
         dqn_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.eval_model.parameters(), 10.0)
         self.optimizer.step()
 
         return dqn_loss.detach().cpu().numpy()
