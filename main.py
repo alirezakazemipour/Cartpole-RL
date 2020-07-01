@@ -6,7 +6,7 @@ import numpy as np
 import time
 
 config = {
-    "env_name": "CartPole-v0",
+    "env_name": "MountainCar-v0",
     "do_intro": False,
     "do_train": True,
     "lr": 0.0001,
@@ -14,7 +14,7 @@ config = {
     "hard_update_period": 500,
     "memory_size": 10000,
     "gamma": 0.99,
-    "max_episodes": 2000,
+    "max_episodes": 2500,
     "print_interval": 50,
     "device": "cpu"
 }
