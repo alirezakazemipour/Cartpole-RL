@@ -11,7 +11,7 @@ class Play:
         self.agent = agent
         self.agent.load_weights()
         self.agent.set_to_eval_mode()
-        self.agent.epsilon = self.agent.min_epsilon
+        # self.agent.epsilon = self.agent.min_epsilon
         self.device = device("cuda" if torch.cuda.is_available() else "cpu")
 
     def evaluate(self):

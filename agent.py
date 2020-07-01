@@ -1,6 +1,6 @@
 import numpy as np
 from model import Model
-from memory import Memory, Transition
+from replay_memory import ReplayMemory, Transition
 import torch
 from torch import device
 from torch import from_numpy
@@ -22,7 +22,7 @@ class Agent:
         self.max_episodes = self.config["max_episodes"]
         self.batch_size = self.config["batch_size"]
         self.gamma = self.config["gamma"]
-        self.memory = Memory(self.config["memory_size"], self.config["alpha"])
+        self.memory = ReplayMemory(self.config["memory_size"], self.config["alpha"])
         self.device = device(self.config["device"])
         self.to_gb = lambda in_bytes: in_bytes / 1024 / 1024 / 1024
 
@@ -32,6 +32,8 @@ class Agent:
         self.n_atoms = self.config["N_Atoms"]
         self.support = torch.linspace(self.v_min, self.v_max, self.n_atoms).to(self.device)
         self.delta_z = (self.v_max - self.v_min) / (self.n_atoms - 1)
+        self.offset = torch.linspace(0, (self.batch_size - 1) * self.n_atoms, self.batch_size).long() \
+            .unsqueeze(1).expand(self.batch_size, self.n_atoms).to(self.device)
 
         self.eval_model = Model(self.n_states, self.n_actions, self.n_atoms, self.support).to(self.device)
         self.target_model = Model(self.n_states, self.n_actions, self.n_atoms, self.support).to(self.device)
@@ -39,6 +41,7 @@ class Agent:
         self.optimizer = Adam(self.eval_model.parameters(), lr=self.config["lr"])
 
     def choose_action(self, state):
+        self.eval_model.reset()
         state = np.expand_dims(state, axis=0)
         state = from_numpy(state).float().to(self.device)
         return np.argmax(self.eval_model.get_q_value(state).detach().cpu().numpy())
@@ -72,14 +75,20 @@ class Agent:
             lower_bound = b.floor().long()
             upper_bound = b.ceil().long()
 
-            projected_dist = torch.zeros((self.batch_size, self.n_atoms)).to(self.device)
-            for i in range(self.batch_size):
-                for j in range(self.n_atoms):
-                    projected_dist[i, lower_bound[i, j]] += (q_next * (upper_bound - b))[i, j]
-                    projected_dist[i, upper_bound[i, j]] += (q_next * (b - lower_bound))[i, j]
+            # projected_dist = torch.zeros((self.batch_size, self.n_atoms)).to(self.device)
+            # for i in range(self.batch_size):
+            #     for j in range(self.n_atoms):
+            #         projected_dist[i, lower_bound[i, j]] += (q_next * (upper_bound - b))[i, j]
+            #         projected_dist[i, upper_bound[i, j]] += (q_next * (b - lower_bound))[i, j]
+
+            projected_dist = torch.zeros(q_next.size()).to(self.device)
+            projected_dist.view(-1).index_add_(0, (lower_bound + self.offset).view(-1),
+                                               (q_next * (upper_bound.float() - b)).view(-1))
+            projected_dist.view(-1).index_add_(0, (upper_bound + self.offset).view(-1),
+                                               (q_next * (b - lower_bound.float())).view(-1))
 
         eval_dist = self.eval_model(states)[range(self.batch_size), actions.squeeze().long()]
-        dqn_loss = - (projected_dist * torch.log(eval_dist + 1e-8)).sum(-1)
+        dqn_loss = - (projected_dist * torch.log(eval_dist + 1e-6)).sum(-1)
         td_error = dqn_loss.abs()
         self.memory.update_priorities(indices, td_error.abs().detach().cpu().numpy() + 0.01)
         dqn_loss = (dqn_loss * weights).mean()
@@ -107,9 +116,11 @@ class Agent:
                 next_state, reward, done, _, = self.env.step(action)
                 episode_reward += reward
                 reward = np.clip(reward, -1, 1)
-                beta = min(1.0, self.config["beta"] + episode * (1.0 - self.config["beta"]) / self.max_episodes)
+                beta = min(1.0, self.config["beta"] + episode * (1.0 - self.config["beta"]) / 1000)
                 self.store(state, reward, done, action, next_state)
                 dqn_loss = self.train(beta)
+                self.env.render()
+                print(action)
                 if done:
                     break
                 state = next_state
@@ -131,8 +142,8 @@ class Agent:
                       f"EP_reward:{episode_reward}| "
                       f"EP_running_reward:{global_running_reward:.3f}| "
                       f"Memory size:{len(self.memory)}| "
-                      f"EP_Duration:{time.time()-start_time:.3f}| "
-                      f"Beta:{beta:.3f}| "    
+                      f"EP_Duration:{time.time() - start_time:.3f}| "
+                      f"Beta:{beta:.2f}| "
                       f"Step:{step}| "
                       f"{self.to_gb(ram.used):.1f}/{self.to_gb(ram.total):.1f} GB RAM| "
                       f'Time:{datetime.datetime.now().strftime("%H:%M:%S")}')

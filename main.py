@@ -6,7 +6,7 @@ import numpy as np
 import time
 
 config = {
-    "env_name": "CartPole-v0",
+    "env_name": "MountainCar-v0",
     "do_intro": False,
     "do_train": True,
     "lr": 0.0001,
@@ -14,12 +14,12 @@ config = {
     "hard_update_period": 500,
     "memory_size": 15000,
     "gamma": 0.99,
-    "max_episodes": 500,
-    "print_interval": 10,
+    "max_episodes": 2000,
+    "print_interval": 100,
     "device": "cpu",
     "n_step": 3,
-    "V_min": 0,
-    "V_max": 200.0,
+    "V_min": -200.0,
+    "V_max": 1.0,
     "N_Atoms": 51,
     "alpha": 0.6,
     "beta": 0.4
@@ -69,3 +69,4 @@ if __name__ == "__main__":
     else:
         player = Play(env, agent)
         player.evaluate()
+
