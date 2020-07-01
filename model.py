@@ -60,8 +60,10 @@ class NoisyLayer(nn.Module):
         self.sigma_w.data.fill_(0.5 / np.sqrt(self.n_inputs))
 
         self.mu_b.data.uniform_(-1 / np.sqrt(self.n_inputs), 1 / np.sqrt(self.n_inputs))
-        self.sigma_b.data.fill_(0.5 / np.sqrt(self.n_inputs))
+        self.sigma_b.data.fill_(0.5 / np.sqrt(self.n_outputs))
 
+        self.epsilon_i = 0
+        self.epsilon_j = 0
         self.reset_noise()
 
     def forward(self, inputs):
