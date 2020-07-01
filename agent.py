@@ -16,6 +16,9 @@ class Agent:
 
         self.config = config
         self.env = env
+        self.epsilon = self.config["epsilon"]
+        self.min_epsilon = self.config["min_epsilon"]
+        self.decay_rate = self.config["epsilon_decay_rate"]
         self.n_actions = self.config["n_actions"]
         self.n_states = self.config["n_states"]
         self.max_steps = self.config["max_steps"]
@@ -32,6 +35,8 @@ class Agent:
         self.n_atoms = self.config["N_Atoms"]
         self.support = torch.linspace(self.v_min, self.v_max, self.n_atoms).to(self.device)
         self.delta_z = (self.v_max - self.v_min) / (self.n_atoms - 1)
+        self.offset = torch.linspace(0, (self.batch_size - 1) * self.n_atoms, self.batch_size).long() \
+            .unsqueeze(1).expand(self.batch_size, self.n_atoms).to(self.device)
 
         self.eval_model = Model(self.n_states, self.n_actions, self.n_atoms, self.support).to(self.device)
         self.target_model = Model(self.n_states, self.n_actions, self.n_atoms, self.support).to(self.device)
@@ -39,9 +44,14 @@ class Agent:
         self.optimizer = Adam(self.eval_model.parameters(), lr=self.config["lr"])
 
     def choose_action(self, state):
-        state = np.expand_dims(state, axis=0)
-        state = from_numpy(state).float().to(self.device)
-        return np.argmax(self.eval_model.get_q_value(state).detach().cpu().numpy())
+        exp = np.random.rand()
+        if self.epsilon > exp:
+            return np.random.randint(self.n_actions)
+
+        else:
+            state = np.expand_dims(state, axis=0)
+            state = from_numpy(state).float().to(self.device)
+            return np.argmax(self.eval_model.get_q_value(state).detach().cpu().numpy())
 
     def hard_update_target_model(self):
         self.target_model.load_state_dict(self.eval_model.state_dict())
@@ -72,14 +82,20 @@ class Agent:
             lower_bound = b.floor().long()
             upper_bound = b.ceil().long()
 
-            projected_dist = torch.zeros((self.batch_size, self.n_atoms)).to(self.device)
-            for i in range(self.batch_size):
-                for j in range(self.n_atoms):
-                    projected_dist[i, lower_bound[i, j]] += (q_next * (upper_bound - b))[i, j]
-                    projected_dist[i, upper_bound[i, j]] += (q_next * (b - lower_bound))[i, j]
+            # projected_dist = torch.zeros((self.batch_size, self.n_atoms)).to(self.device)
+            # for i in range(self.batch_size):
+            #     for j in range(self.n_atoms):
+            #         projected_dist[i, lower_bound[i, j]] += (q_next * (upper_bound - b))[i, j]
+            #         projected_dist[i, upper_bound[i, j]] += (q_next * (b - lower_bound))[i, j]
+
+            projected_dist = torch.zeros(q_next.size()).to(self.device)
+            projected_dist.view(-1).index_add_(0, (lower_bound + self.offset).view(-1),
+                                               (q_next * (upper_bound.float() - b)).view(-1))
+            projected_dist.view(-1).index_add_(0, (upper_bound + self.offset).view(-1),
+                                               (q_next * (b - lower_bound.float())).view(-1))
 
         eval_dist = self.eval_model(states)[range(self.batch_size), actions.squeeze().long()]
-        dqn_loss = - (projected_dist * torch.log(eval_dist + 1e-8)).sum(-1)
+        dqn_loss = - (projected_dist * torch.log(eval_dist + 1e-6)).sum(-1)
         td_error = dqn_loss.abs()
         self.memory.update_priorities(indices, td_error.abs().detach().cpu().numpy() + 0.01)
         dqn_loss = (dqn_loss * weights).mean()
@@ -88,9 +104,6 @@ class Agent:
         dqn_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.eval_model.parameters(), 10.0)
         self.optimizer.step()
-
-        self.target_model.reset()
-        self.eval_model.reset()
 
         return dqn_loss.detach().cpu().numpy()
 
@@ -107,7 +120,7 @@ class Agent:
                 next_state, reward, done, _, = self.env.step(action)
                 episode_reward += reward
                 reward = np.clip(reward, -1, 1)
-                beta = min(1.0, self.config["beta"] + episode * (1.0 - self.config["beta"]) / self.max_episodes)
+                beta = min(1.0, self.config["beta"] + episode * (1.0 - self.config["beta"]) / 1000)
                 self.store(state, reward, done, action, next_state)
                 dqn_loss = self.train(beta)
                 if done:
@@ -117,6 +130,8 @@ class Agent:
                 if (episode * step) % self.config["hard_update_period"] == 0:
                     self.hard_update_target_model()
                 # self.soft_update_of_target_network(self.eval_model, self.target_model, tau=0.05)
+                self.epsilon = self.epsilon - self.decay_rate if self.epsilon > self.min_epsilon + self.decay_rate\
+                    else self.min_epsilon
 
             if episode == 1:
                 global_running_reward = episode_reward
@@ -130,9 +145,10 @@ class Agent:
                       f"DQN_loss:{dqn_loss:.2f}| "
                       f"EP_reward:{episode_reward}| "
                       f"EP_running_reward:{global_running_reward:.3f}| "
+                      f"Epsilon:{self.epsilon:.3f}| "
                       f"Memory size:{len(self.memory)}| "
-                      f"EP_Duration:{time.time()-start_time:.3f}| "
-                      f"Beta:{beta:.3f}| "    
+                      f"EP_Duration:{time.time() - start_time:.3f}| "
+                      f"Beta:{beta:.3f}| "
                       f"Step:{step}| "
                       f"{self.to_gb(ram.used):.1f}/{self.to_gb(ram.total):.1f} GB RAM| "
                       f'Time:{datetime.datetime.now().strftime("%H:%M:%S")}')
