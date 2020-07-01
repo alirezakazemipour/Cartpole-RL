@@ -21,7 +21,7 @@ class Model(nn.Module):
         x = inputs
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        return self.q_values(x.T).T
+        return self.q_values(x)
 
     def reset(self):
         self.fc2.reset_noise()
@@ -38,9 +38,9 @@ class NoisyLayer(nn.Module):
         self.sigma_w = nn.Parameter(torch.FloatTensor(self.n_outputs, self.n_inputs))
         self.register_buffer('weight_epsilon', torch.FloatTensor(self.n_outputs, self.n_inputs))
 
-        self.mu_b = nn.Parameter(torch.FloatTensor(self.n_outputs, 1))
-        self.sigma_b = nn.Parameter(torch.FloatTensor(self.n_outputs, 1))
-        self.register_buffer('bias_epsilon', torch.FloatTensor(self.n_outputs, 1))
+        self.mu_b = nn.Parameter(torch.FloatTensor(self.n_outputs))
+        self.sigma_b = nn.Parameter(torch.FloatTensor(self.n_outputs))
+        self.register_buffer('bias_epsilon', torch.FloatTensor(self.n_outputs))
 
         self.mu_w.data.uniform_(-1 / np.sqrt(self.n_inputs), 1 / np.sqrt(self.n_inputs))
         self.sigma_w.data.fill_(0.5 / np.sqrt(self.n_inputs))
@@ -54,16 +54,16 @@ class NoisyLayer(nn.Module):
 
     def forward(self, inputs):
         x = inputs
-        weights = self.mu_w + self.sigma_w.mul(self.weight_epsilon)
-        biases = self.mu_b + self.sigma_b.mul(self.bias_epsilon)
-        x = x.mm(weights.T).T + biases
+        weights = self.mu_w + self.sigma_w * self.weight_epsilon
+        biases = self.mu_b + self.sigma_b * self.bias_epsilon
+        x = F.linear(x, weights, biases)
         return x
 
     def f(self, x):
         return torch.sign(x) * torch.sqrt(torch.abs(x))
 
     def reset_noise(self):
-        self.epsilon_i = self.f(torch.randn(self.n_inputs)).view((-1, 1))
-        self.epsilon_j = self.f(torch.randn(self.n_outputs)).view((-1, 1))
-        self.weight_epsilon.copy_(self.epsilon_j.mm(self.epsilon_i.T))
+        self.epsilon_i = self.f(torch.randn(self.n_inputs))
+        self.epsilon_j = self.f(torch.randn(self.n_outputs))
+        self.weight_epsilon.copy_(self.epsilon_j.ger(self.epsilon_i))
         self.bias_epsilon.copy_(self.epsilon_j)
