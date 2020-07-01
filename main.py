@@ -6,7 +6,7 @@ import numpy as np
 import time
 
 config = {
-    "env_name": "CartPole-v0",
+    "env_name": "MountainCar-v0",
     "do_intro": False,
     "do_train": True,
     "lr": 0.0001,
@@ -19,7 +19,9 @@ config = {
     "min_epsilon": 0.01,
     "epsilon": 1.0,
     "print_interval": 50,
-    "device": "cpu"
+    "device": "cpu",
+    "beta": 0.4,
+    "alpha": 0.6
 }
 
 

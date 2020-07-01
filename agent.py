@@ -1,6 +1,6 @@
 import numpy as np
 from model import Model
-from memory import Memory, Transition
+from memory import ReplayMemory, Transition
 import torch
 from torch import device
 from torch import from_numpy
@@ -24,7 +24,7 @@ class Agent:
         self.max_episodes = self.config["max_episodes"]
         self.batch_size = self.config["batch_size"]
         self.gamma = self.config["gamma"]
-        self.memory = Memory(self.config["memory_size"])
+        self.memory = ReplayMemory(self.config["memory_size"], self.config["alpha"])
         self.device = device(self.config["device"])
 
         self.eval_model = Model(self.n_states, self.n_actions).to(self.device)
@@ -51,10 +51,11 @@ class Agent:
         self.target_model.load_state_dict(self.eval_model.state_dict())
         self.target_model.eval()
 
-    def train(self):
+    def train(self, beta):
         if len(self.memory) < self.batch_size:
             return 0  # as no loss
-        batch = self.memory.sample(self.batch_size)
+        batch, weights, indices = self.memory.sample(self.batch_size, beta)
+        weights = from_numpy(weights).float().to(self.device)
         states, actions, rewards, next_states, dones = self.unpack_batch(batch)
 
         q_eval = self.eval_model(states).gather(dim=-1, index=actions.long())
@@ -66,7 +67,9 @@ class Agent:
             q_next = q_next.gather(dim=-1, index=next_actions.long())
 
             q_target = rewards + self.gamma * q_next * (1 - dones)
-        dqn_loss = self.loss_fn(q_eval, q_target)
+        td_error = (q_target - q_eval).abs()
+        self.memory.update_priorities(indices, td_error.abs().detach().cpu().numpy() + 1e-6)
+        dqn_loss = (td_error.pow(2) * weights).mean()
 
         self.optimizer.zero_grad()
         dqn_loss.backward()
@@ -86,8 +89,9 @@ class Agent:
                 action = self.choose_action(state)
                 next_state, reward, done, _, = self.env.step(action)
                 episode_reward += reward
+                beta = min(1.0, self.config["beta"] + episode * (1.0 - self.config["beta"]) / 1000)
                 self.store(state, reward, done, action, next_state)
-                dqn_loss = self.train()
+                dqn_loss = self.train(beta)
                 if done:
                     break
                 state = next_state
@@ -110,6 +114,7 @@ class Agent:
                       f"EP_reward:{episode_reward}| "
                       f"EP_running_reward:{global_running_reward:.3f}| "
                       f"Epsilon:{self.epsilon:.2f}| "
+                      f"Beta:{beta:.2f}| "
                       f"Memory size:{len(self.memory)}| "
                       f"EP_Duration:{time.time()-start_time:.3f}| "
                       f"{self.to_gb(ram.used):.1f}/{self.to_gb(ram.total):.1f} GB RAM| "
