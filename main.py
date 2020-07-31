@@ -4,9 +4,10 @@ import cv2
 import numpy as np
 from brain import Brain
 import gym
-from tqdm import tqdm
+import os
 import time
 from torch.utils.tensorboard import SummaryWriter
+from test_policy import evaluate_policy
 
 
 env_name = "CartPole-v0"
@@ -15,7 +16,7 @@ n_states = test_env.observation_space.shape[0]
 n_actions = test_env.action_space.n
 n_workers = 8
 device = "cuda"
-iterations = int(1e6)
+iterations = int(500)
 T = 128
 epochs = 3
 lr = 2.5e-4
@@ -25,6 +26,7 @@ clip_range = 0.1
 def get_states(worker):
     # print('parent process:', os.getppid())
     # print('process id:', os.getpid())
+    # print(threading.get_ident())
     return worker.state
 
 
@@ -61,7 +63,7 @@ if __name__ == '__main__':
                 for result in results:
                     states.append(result)
                 states = np.vstack(states)
-                actions, values = brain.get_action_and_values(states)
+                actions, values = brain.get_actions_and_values(states)
 
                 results = p.map(apply_actions, workers, actions)
                 for result in results:
@@ -81,7 +83,7 @@ if __name__ == '__main__':
             total_rewards.append(rewards)
             total_values.append(values)
 
-        _, next_values = brain.get_action_and_values(next_states)
+        _, next_values = brain.get_actions_and_values(next_states)
         total_states = np.vstack(total_states)
         total_actions = np.vstack(total_actions).reshape((n_workers * T,))
         total_values = np.vstack(total_values).reshape((n_workers, -1))
@@ -89,25 +91,29 @@ if __name__ == '__main__':
         total_dones = np.vstack(total_dones).reshape((n_workers, -1))
         total_loss, entropy = brain.train(total_states, total_actions, total_rewards, total_dones, total_values, next_values)
         brain.equalize_policies()
-        # brain.schedule_lr()
+        brain.schedule_lr()
         # brain.schedule_clip_range(iteration)
+        episode_reward = evaluate_policy(env_name, brain)
+
+        if iteration == 0:
+            running_reward = episode_reward
+        else:
+            running_reward = 0.99 * running_reward + 0.01 * episode_reward
 
         if iteration % 50 == 0:
-            print(f"Iter:{iteration}| "
-                  f"Mean_Reward:{workers[0].ep_r:.3f}| "
-                  f"Running_reward:{workers[0].running_reward:.3f}| "
-                  f"Total_loss:{total_loss:.3f}| "
-                  f"Entropy:{entropy:.3f}| "
-                  # f"Actor_Loss:{actor_loss:3.3f}| "
-                  # f"Critic_Loss:{critic_loss:3.3f}| "
-                  f"Iter_duration:{time.time() - start_time:.3f}| "
-                  f"lr:{brain.scheduler.get_last_lr()} |"
-                  f"clip_range:{brain.epsilon:.3f}")
+            print(f"Iter: {iteration}| "
+                  f"Ep_reward: {episode_reward:.3f}| "
+                  f"Running_reward: {running_reward:.3f}| "
+                  f"Total_loss: {total_loss:.3f}| "
+                  f"Entropy: {entropy:.3f}| "
+                  f"Iter_duration: {time.time() - start_time:.3f}| "
+                  f"Lr: {brain.scheduler.get_last_lr()}| "
+                  f"Clip_range:{brain.epsilon:.3f}")
             brain.save_weights()
 
         with SummaryWriter(env_name + "/logs") as writer:
-            writer.add_scalar("running reward", workers[0].running_reward, iteration)
-            writer.add_scalar("mean envs reward", workers[0].ep_r, iteration)
+            writer.add_scalar("running reward", running_reward, iteration)
+            writer.add_scalar("episode reward", episode_reward, iteration)
             writer.add_scalar("loss", total_loss, iteration)
             writer.add_scalar("entropy", entropy, iteration)
 

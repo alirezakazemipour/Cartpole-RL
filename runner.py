@@ -2,13 +2,11 @@ import gym
 
 
 class Worker:
-    def __init__(self, n, env_name):
-        self.n = n
+    def __init__(self, id, env_name):
+        self.id = id
         self.env_name = env_name
         self.env = gym.make(self.env_name)
         self._state = None
-        self.ep_r = 0
-        self.running_reward = 0
         self.reset()
 
     def __str__(self):
@@ -23,13 +21,10 @@ class Worker:
 
     def reset(self):
         self._state = self.env.reset()
-        self.running_reward = 0.99 * self.running_reward + 0.01 * self.ep_r
-        self.ep_r = 0
 
     def step(self, action):
         next_state, r, d, _ = self.env.step(action)
         self._state = next_state
-        self.ep_r += r
         if d:
             self.reset()
         return dict({"next_state": next_state, "reward": r, "done": d})
