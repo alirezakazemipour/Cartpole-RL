@@ -8,7 +8,6 @@ def evaluate_policy(env_name, agent):
     episode_reward = 0
     done = False
     while not done:
-        s = np.expand_dims(s, 0)
         action, _ = agent.get_actions_and_values(s)
         next_s, r, done, _ = env.step(action.squeeze())
         s = next_s

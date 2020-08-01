@@ -28,11 +28,12 @@ class Brain:
         self.scheduler = LambdaLR(self.optimizer, lr_lambda=self._schedule_fn)
 
     def get_actions_and_values(self, state):
+        state = np.expand_dims(state, 0)
         state = from_numpy(state).float().to(self.device)
         with torch.no_grad():
             dist, value = self.current_policy(state)
             action = dist.sample().cpu().numpy()
-        return action, value.detach().cpu().numpy()
+        return action.squeeze(), value.detach().cpu().numpy().squeeze()
 
     @staticmethod
     def choose_mini_batch(mini_batch_size, states, actions, returns, advs, values):
@@ -43,9 +44,9 @@ class Brain:
 
     def train(self, states, actions, rewards, dones, values, next_values):
         returns = self.get_gae(rewards, values.copy(), next_values, dones)
-        advs = returns - np.vstack(values).reshape((sum([len(values[i]) for i in range(self.n_workers)]),))
+        values = np.vstack(values).reshape((len(values[0]) * self.n_workers, ))
+        advs = returns - values
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
-        values = np.vstack(values).reshape((sum([len(values[i]) for i in range(self.n_workers)]),))
         for epoch in range(self.epochs):
             for state, action, q_value, adv, old_value in self.choose_mini_batch(self.mini_batch_size,
                                                                                  states, actions, returns, advs,
@@ -103,7 +104,7 @@ class Brain:
                 gae = delta + gamma * lam * (1 - dones[worker][step]) * gae
                 returns[worker].insert(0, gae + extended_values[worker][step])
 
-        return np.vstack(returns).reshape((sum([len(returns[i]) for i in range(self.n_workers)]),))
+        return np.vstack(returns).reshape((len(returns[0]) * self.n_workers,))
 
     @staticmethod
     def calculate_log_probs(model, states, actions):
