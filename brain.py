@@ -120,3 +120,9 @@ class Brain:
 
     def save_weights(self):
         torch.save(self.current_policy.state_dict(), "weights.pth")
+
+    def load_weights(self):
+        self.current_policy.load_state_dict(torch.load("weights.pth"))
+
+    def set_to_eval_mode(self):
+        self.current_policy.eval()
