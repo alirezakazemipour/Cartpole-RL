@@ -27,13 +27,14 @@ class Brain:
         self._schedule_fn = lambda step: max(1.0 - float(step / self.n_iters), 0)
         self.scheduler = LambdaLR(self.optimizer, lr_lambda=self._schedule_fn)
 
-    def get_actions_and_values(self, state):
-        state = np.expand_dims(state, 0)
+    def get_actions_and_values(self, state, batch=False):
+        if not batch:
+            state = np.expand_dims(state, 0)
         state = from_numpy(state).float().to(self.device)
         with torch.no_grad():
             dist, value = self.current_policy(state)
             action = dist.sample().cpu().numpy()
-        return action.squeeze(), value.detach().cpu().numpy().squeeze()
+        return action, value.detach().cpu().numpy().squeeze()
 
     @staticmethod
     def choose_mini_batch(mini_batch_size, states, actions, returns, advs, values):
@@ -65,9 +66,9 @@ class Brain:
                 ratio = (new_log_prob - old_log_prob).exp()
                 actor_loss = self.compute_ac_loss(ratio, adv)
 
-                clipped_value = old_value + torch.clamp(value.squeeze(-1) - old_value, -self.epsilon, self.epsilon)
+                clipped_value = old_value + torch.clamp(value.squeeze() - old_value, -self.epsilon, self.epsilon)
                 clipped_v_loss = (clipped_value - q_value).pow(2)
-                unclipped_v_loss = (value.squeeze(-1) - q_value).pow(2)
+                unclipped_v_loss = (value.squeeze() - q_value).pow(2)
                 critic_loss = 0.5 * torch.max(clipped_v_loss, unclipped_v_loss).mean()
 
                 total_loss = critic_loss + actor_loss - 0.01 * entropy
