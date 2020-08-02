@@ -4,7 +4,6 @@ from torch import from_numpy
 import numpy as np
 from torch.optim.adam import Adam
 from torch.optim.lr_scheduler import LambdaLR
-from tqdm import tqdm
 
 
 class Brain:
@@ -16,6 +15,7 @@ class Brain:
         self.mini_batch_size = 32 * self.n_workers
         self.epochs = epochs
         self.n_iters = n_iters
+        self.initial_epsilon = epsilon
         self.epsilon = epsilon
         self.lr = lr
 
@@ -84,7 +84,7 @@ class Brain:
         self.scheduler.step()
 
     def schedule_clip_range(self, iter):
-        self.epsilon *= max(1.0 - float(iter / self.n_iters), 0)
+        self.epsilon = max(1.0 - float(iter / self.n_iters), 0) * self.initial_epsilon
 
     def optimize(self, loss):
         self.optimizer.zero_grad()

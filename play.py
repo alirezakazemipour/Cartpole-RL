@@ -22,7 +22,7 @@ class Play:
             # x = input("Push any button to proceed...")
             for _ in range(self.env._max_episode_steps):
                 action, _ = self.agent.get_actions_and_values(s)
-                s_, r, done, _ = self.env.step(action)
+                s_, r, done, _ = self.env.step(action.squeeze())
                 episode_reward += r
                 if done:
                     break

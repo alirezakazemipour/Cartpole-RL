@@ -9,13 +9,13 @@ from torch.utils.tensorboard import SummaryWriter
 from test_policy import evaluate_policy
 from play import Play
 
-env_name = "CartPole-v0"
+env_name = "LunarLander-v2"
 test_env = gym.make(env_name)
 n_states = test_env.observation_space.shape[0]
 n_actions = test_env.action_space.n
 n_workers = 8
 device = "cuda"
-iterations = int(2000)
+iterations = int(4000)
 T = 128
 epochs = 3
 lr = 2.5e-4
@@ -70,7 +70,7 @@ if __name__ == '__main__':
                                           total_dones, total_values, next_values)
         brain.equalize_policies()
         brain.schedule_lr()
-        # brain.schedule_clip_range(iteration)
+        brain.schedule_clip_range(iteration)
         episode_reward = evaluate_policy(env_name, brain)
 
         if iteration == 0:
