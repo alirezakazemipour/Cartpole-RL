@@ -74,7 +74,7 @@ class Brain:
                 total_loss = critic_loss + actor_loss - 0.01 * entropy
                 self.optimize(total_loss)
 
-        return total_loss.item(), entropy.item()
+        return total_loss.item(), critic_loss.item(), actor_loss.item(), entropy.item()
 
     def equalize_policies(self):
         for old_params, new_params in zip(self.old_policy.parameters(), self.current_policy.parameters()):
@@ -96,13 +96,16 @@ class Brain:
 
         returns = [[] for _ in range(self.n_workers)]
         extended_values = np.zeros((self.n_workers, len(rewards[0]) + 1))
+        extended_dones = np.zeros((self.n_workers, len(rewards[0]) + 1))
         for worker in range(self.n_workers):
             extended_values[worker] = np.append(values[worker], next_values[worker])
+            extended_dones[worker] = np.append(dones[worker], 0)
             gae = 0
             for step in reversed(range(len(rewards[worker]))):
-                delta = rewards[worker][step] + gamma * (extended_values[worker][step + 1]) * (1 - dones[worker][step])\
+                delta = rewards[worker][step] +\
+                        gamma * (extended_values[worker][step + 1]) * (1 - extended_dones[worker][step + 1])\
                         - extended_values[worker][step]
-                gae = delta + gamma * lam * (1 - dones[worker][step]) * gae
+                gae = delta + gamma * lam * (1 - extended_dones[worker][step + 1]) * gae
                 returns[worker].insert(0, gae + extended_values[worker][step])
 
         return np.vstack(returns).reshape((len(returns[0]) * self.n_workers,))

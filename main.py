@@ -63,11 +63,12 @@ if __name__ == '__main__':
                 total_dones[worker_id, t] = d
                 next_states[worker_id] = s_
         _, next_values = brain.get_actions_and_values(next_states, batch=True)
+        next_values *= (1 - total_dones[:, -1])
 
         total_states = total_states.reshape((n_workers * T, n_states))
         total_actions = total_actions.reshape(n_workers * T)
-        total_loss, entropy = brain.train(total_states, total_actions, total_rewards,
-                                          total_dones, total_values, next_values)
+        total_loss, c_loss, a_loss, entropy = brain.train(total_states, total_actions, total_rewards,
+                                                          total_dones, total_values, next_values)
         brain.equalize_policies()
         brain.schedule_lr()
         brain.schedule_clip_range(iteration)
@@ -92,7 +93,9 @@ if __name__ == '__main__':
         with SummaryWriter(env_name + "/logs") as writer:
             writer.add_scalar("running reward", running_reward, iteration)
             writer.add_scalar("episode reward", episode_reward, iteration)
-            writer.add_scalar("loss", total_loss, iteration)
+            writer.add_scalar("total loss", total_loss, iteration)
+            writer.add_scalar("actor loss", a_loss, iteration)
+            writer.add_scalar("critic loss", c_loss, iteration)
             writer.add_scalar("entropy", entropy, iteration)
 
     play = Play(test_env, brain)
