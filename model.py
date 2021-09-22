@@ -36,7 +36,7 @@ class Model(nn.Module):
         value = self.value(value_fc).view(-1, 1, self.n_atoms)
 
         mass_probs = value + adv - adv.mean(1, keepdim=True)
-        return F.softmax(mass_probs, dim=-1).clamp(min=1e-3)
+        return F.softmax(mass_probs, dim=-1)
 
     def get_q_value(self, x):
         dist = self(x)

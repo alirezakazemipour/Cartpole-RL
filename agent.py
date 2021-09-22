@@ -53,7 +53,7 @@ class Agent:
         else:
             state = np.expand_dims(state, axis=0)
             state = from_numpy(state).float().to(self.device)
-            return np.argmax(self.eval_model.get_q_value(state).detach().cpu().numpy())
+            return self.eval_model.get_q_value(state).argmax(-1).item()
 
     def update_train_model(self):
         self.target_model.load_state_dict(self.eval_model.state_dict())
@@ -61,7 +61,7 @@ class Agent:
 
     def train(self):
         if len(self.memory) < self.batch_size:
-            return 0  # as no loss
+            return 0, 0  # as no loss
         batch = self.memory.sample(self.batch_size)
         states, actions, rewards, next_states, dones = self.unpack_batch(batch)
 
@@ -94,10 +94,10 @@ class Agent:
 
         self.optimizer.zero_grad()
         dqn_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.eval_model.parameters(), 10.0)
+        g_norm = torch.nn.utils.clip_grad_norm_(self.eval_model.parameters(), 10.0)
         self.optimizer.step()
 
-        return dqn_loss.detach().cpu().numpy()
+        return dqn_loss.detach().cpu().numpy(), g_norm.item()
 
     def run(self):
 
@@ -112,7 +112,7 @@ class Agent:
                 next_state, reward, done, _, = self.env.step(action)
                 episode_reward += reward
                 self.store(state, reward, done, action, next_state)
-                dqn_loss = self.train()
+                dqn_loss, g_norm = self.train()
                 if done:
                     break
                 state = next_state
@@ -130,13 +130,14 @@ class Agent:
             total_global_running_reward.append(global_running_reward)
             ram = psutil.virtual_memory()
             if episode % self.config["print_interval"] == 0:
-                print(f"EP:{episode}| "
-                      f"DQN_loss:{dqn_loss:.2f}| "
-                      f"EP_reward:{episode_reward}| "
-                      f"EP_running_reward:{global_running_reward:.3f}| "
-                      f"Epsilon:{self.epsilon:.2f}| "
-                      f"Memory size:{len(self.memory)}| "
-                      f"EP_Duration:{time.time()-start_time:.3f}| "
+                print(f"E:{episode}| "
+                      f"loss:{dqn_loss:.2f}| "
+                      f"g_norm:{g_norm:.2f}| "
+                      f"E_reward:{episode_reward}| "
+                      f"E_running_reward:{global_running_reward:.1f}| "
+                      f"Eps:{self.epsilon:.2f}| "
+                      f"Mem size:{len(self.memory)}| "
+                      f"E_Duration:{time.time()-start_time:.2f}| "
                       f"{self.to_gb(ram.used):.1f}/{self.to_gb(ram.total):.1f} GB RAM| "
                       f'Time:{datetime.datetime.now().strftime("%H:%M:%S")}')
                 self.save_weights()
