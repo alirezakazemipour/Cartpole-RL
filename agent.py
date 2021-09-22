@@ -44,7 +44,7 @@ class Agent:
         self.eval_model.reset()
         state = np.expand_dims(state, axis=0)
         state = from_numpy(state).float().to(self.device)
-        return np.argmax(self.eval_model.get_q_value(state).detach().cpu().numpy())
+        return self.eval_model.get_q_value(state).argmax(-1).item()
 
     def hard_update_target_model(self):
         self.target_model.load_state_dict(self.eval_model.state_dict())
@@ -58,7 +58,7 @@ class Agent:
 
     def train(self, beta):
         if len(self.memory) < self.batch_size:
-            return 0  # as no loss
+            return 0, 0  # as no loss
         batch, weights, indices = self.memory.sample(self.batch_size, beta)
         weights = from_numpy(weights).float().to(self.device)
         states, actions, rewards, next_states, dones = self.unpack_batch(batch)
@@ -66,10 +66,10 @@ class Agent:
         with torch.no_grad():
             q_eval_next = self.eval_model.get_q_value(next_states)
             next_actions = q_eval_next.argmax(dim=-1)
-            q_next = self.target_model(next_states)[range(self.batch_size), next_actions.long()]
+            q_next = self.target_model(next_states)[range(self.batch_size), next_actions]
 
-            projected_atoms = rewards + (self.config["gamma"] ** self.config["n_step"]) * self.support * (1 - dones)
-            projected_atoms = projected_atoms.clamp_(self.v_min, self.v_max)
+            projected_atoms = rewards + (self.config["gamma"] ** self.config["n_step"]) * self.support * (1 - dones.long())
+            projected_atoms = projected_atoms.clamp(self.v_min, self.v_max)
 
             b = (projected_atoms - self.v_min) / self.delta_z
             lower_bound = b.floor().long()
@@ -88,20 +88,20 @@ class Agent:
                                                (q_next * (b - lower_bound.float())).view(-1))
 
         eval_dist = self.eval_model(states)[range(self.batch_size), actions.squeeze().long()]
-        dqn_loss = - (projected_dist * torch.log(eval_dist + 1e-6)).sum(-1)
+        dqn_loss = -(projected_dist * torch.log(eval_dist + 1e-6)).sum(-1)
         td_error = dqn_loss.abs()
-        self.memory.update_priorities(indices, td_error.abs().detach().cpu().numpy() + 0.01)
+        self.memory.update_priorities(indices, td_error.abs().detach().cpu().numpy() + 1e-6)
         dqn_loss = (dqn_loss * weights).mean()
 
         self.optimizer.zero_grad()
         dqn_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.eval_model.parameters(), 10.0)
+        g_norm = torch.nn.utils.clip_grad_norm_(self.eval_model.parameters(), 10.0)
         self.optimizer.step()
 
         self.target_model.reset()
         self.eval_model.reset()
 
-        return dqn_loss.detach().cpu().numpy()
+        return dqn_loss.detach().cpu().numpy(), g_norm.item()
 
     def run(self):
 
@@ -115,12 +115,12 @@ class Agent:
                 action = self.choose_action(state)
                 next_state, reward, done, _, = self.env.step(action)
                 episode_reward += reward
-                reward = np.clip(reward, -1, 1)
+                # reward = np.clip(reward, -1, 1)
                 beta = min(1.0, self.config["beta"] + episode * (1.0 - self.config["beta"]) / 1000)
                 self.store(state, reward, done, action, next_state)
-                dqn_loss = self.train(beta)
-                self.env.render()
-                print(action)
+                dqn_loss, g_norm = self.train(beta)
+                # self.env.render()
+                # print(action)
                 if done:
                     break
                 state = next_state
@@ -137,12 +137,13 @@ class Agent:
             total_global_running_reward.append(global_running_reward)
             ram = psutil.virtual_memory()
             if episode % self.config["print_interval"] == 0:
-                print(f"EP:{episode}| "
-                      f"DQN_loss:{dqn_loss:.2f}| "
-                      f"EP_reward:{episode_reward}| "
-                      f"EP_running_reward:{global_running_reward:.3f}| "
-                      f"Memory size:{len(self.memory)}| "
-                      f"EP_Duration:{time.time() - start_time:.3f}| "
+                print(f"E:{episode}| "
+                      f"loss:{dqn_loss:.2f}| "
+                      f"g_norm:{g_norm:.2f}| "
+                      f"E_reward:{episode_reward}| "
+                      f"E_running_reward:{global_running_reward:.1f}| "
+                      f"Mem size:{len(self.memory)}| "
+                      f"E_Duration:{time.time() - start_time:.3f}| "
                       f"Beta:{beta:.2f}| "
                       f"Step:{step}| "
                       f"{self.to_gb(ram.used):.1f}/{self.to_gb(ram.total):.1f} GB RAM| "
@@ -156,7 +157,7 @@ class Agent:
         if len(self.n_step_buffer) < self.config["n_step"]:
             return
         reward, next_state, done = self.n_step_returns()
-        state, action, _, _, _ = self.n_step_buffer.pop()
+        state, action, *_ = self.n_step_buffer.popleft()
 
         state = from_numpy(state).float().to(self.device)
         reward = torch.Tensor([reward]).to(self.device)

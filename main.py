@@ -15,7 +15,7 @@ config = {
     "memory_size": 15000,
     "gamma": 0.99,
     "max_episodes": 2000,
-    "print_interval": 100,
+    "print_interval": 10,
     "device": "cpu",
     "n_step": 3,
     "V_min": -200.0,
