@@ -4,6 +4,7 @@ from play import Play
 import matplotlib.pyplot as plt
 import numpy as np
 import time
+import os
 
 config = {
     "env_name": "MountainCar-v0",
@@ -18,11 +19,12 @@ config = {
     "print_interval": 10,
     "device": "cpu",
     "n_step": 3,
-    "V_min": -200.0,
-    "V_max": 1.0,
+    "V_min": -200.,
+    "V_max": 1.,
     "N_Atoms": 51,
     "alpha": 0.6,
-    "beta": 0.4
+    "beta": 0.4,
+    "seed": 123
 }
 
 
@@ -32,7 +34,8 @@ num_actions = env.action_space.n
 
 config.update({"n_states": num_states,
                "n_actions": num_actions,
-               "max_steps": env._max_episode_steps})
+               "max_steps": env.spec.max_episode_steps})
+
 
 print("Environment is: {}".format(config["env_name"]))
 print("Number of states: {}".format(num_states))
@@ -51,6 +54,7 @@ def test_env_working():
 
 
 if __name__ == "__main__":
+    # os.environ[]
 
     if config["do_intro"]:
         test_env_working()

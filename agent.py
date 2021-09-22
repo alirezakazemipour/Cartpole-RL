@@ -68,12 +68,15 @@ class Agent:
             next_actions = q_eval_next.argmax(dim=-1)
             q_next = self.target_model(next_states)[range(self.batch_size), next_actions]
 
-            projected_atoms = rewards + (self.config["gamma"] ** self.config["n_step"]) * self.support * (1 - dones.long())
-            projected_atoms = projected_atoms.clamp(self.v_min, self.v_max)
+            projected_atoms = rewards + (self.config["gamma"] ** self.config["n_step"]) * self.support * \
+                              (1 - dones.long())
+            projected_atoms = projected_atoms.clamp(min=self.v_min, max=self.v_max)
 
             b = (projected_atoms - self.v_min) / self.delta_z
             lower_bound = b.floor().long()
             upper_bound = b.ceil().long()
+            # lower_bound[(upper_bound > 0) * (lower_bound == upper_bound)] -= 1
+            # upper_bound[(lower_bound < (self.n_atoms - 1)) * (lower_bound == upper_bound)] += 1
 
             # projected_dist = torch.zeros((self.batch_size, self.n_atoms)).to(self.device)
             # for i in range(self.batch_size):
@@ -106,11 +109,15 @@ class Agent:
     def run(self):
 
         total_global_running_reward = []
-        global_running_reward = 0
+        running_reward = 0
+        running_loss = 0
+        running_norm = 0
         for episode in range(1, 1 + self.max_episodes):
             start_time = time.time()
             state = self.env.reset()
             episode_reward = 0
+            episode_loss = 0
+            episode_norm = 0
             for step in range(1, 1 + self.max_steps):
                 action = self.choose_action(state)
                 next_state, reward, done, _, = self.env.step(action)
@@ -119,6 +126,8 @@ class Agent:
                 beta = min(1.0, self.config["beta"] + episode * (1.0 - self.config["beta"]) / 1000)
                 self.store(state, reward, done, action, next_state)
                 dqn_loss, g_norm = self.train(beta)
+                episode_loss += dqn_loss
+                episode_norm += g_norm
                 # self.env.render()
                 # print(action)
                 if done:
@@ -127,21 +136,25 @@ class Agent:
 
                 if (episode * step) % self.config["hard_update_period"] == 0:
                     self.hard_update_target_model()
-                # self.soft_update_of_target_network(self.eval_model, self.target_model, tau=0.05)
+                # self.soft_update_of_target_network(self.eval_model, self.target_model, tau=0.01 / 5)
 
             if episode == 1:
-                global_running_reward = episode_reward
+                running_reward = episode_reward
+                running_loss = episode_loss / step
+                running_norm = episode_norm / step
             else:
-                global_running_reward = 0.99 * global_running_reward + 0.01 * episode_reward
+                running_reward = 0.9 * running_reward + 0.1 * episode_reward
+                running_loss = 0.9 * running_loss + 0.1 * episode_loss / step
+                running_norm = 0.9 * running_norm + 0.1 * episode_norm / step
 
-            total_global_running_reward.append(global_running_reward)
+            total_global_running_reward.append(running_reward)
             ram = psutil.virtual_memory()
             if episode % self.config["print_interval"] == 0:
                 print(f"E:{episode}| "
-                      f"loss:{dqn_loss:.2f}| "
-                      f"g_norm:{g_norm:.2f}| "
+                      f"loss:{running_loss:.2f}| "
+                      f"g_norm:{running_norm:.2f}| "
                       f"E_reward:{episode_reward}| "
-                      f"E_running_reward:{global_running_reward:.1f}| "
+                      f"E_running_reward:{running_reward:.1f}| "
                       f"Mem size:{len(self.memory)}| "
                       f"E_Duration:{time.time() - start_time:.3f}| "
                       f"Beta:{beta:.2f}| "
