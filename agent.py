@@ -41,9 +41,10 @@ class Agent:
         self.optimizer = Adam(self.eval_model.parameters(), lr=self.config["lr"])
 
     def choose_action(self, state):
-        self.eval_model.reset()
+        # self.eval_model.reset()
         state = np.expand_dims(state, axis=0)
         state = from_numpy(state).float().to(self.device)
+        # self.eval_model.reset()
         return self.eval_model.get_q_value(state).argmax(-1).item()
 
     def hard_update_target_model(self):
@@ -64,6 +65,8 @@ class Agent:
         states, actions, rewards, next_states, dones = self.unpack_batch(batch)
 
         with torch.no_grad():
+            self.target_model.reset()
+            self.eval_model.reset()
             q_eval_next = self.eval_model.get_q_value(next_states)
             next_actions = q_eval_next.argmax(dim=-1)
             q_next = self.target_model(next_states)[range(self.batch_size), next_actions]
@@ -100,9 +103,6 @@ class Agent:
         dqn_loss.backward()
         g_norm = torch.nn.utils.clip_grad_norm_(self.eval_model.parameters(), 10.0)
         self.optimizer.step()
-
-        self.target_model.reset()
-        self.eval_model.reset()
 
         return dqn_loss.detach().cpu().numpy(), g_norm.item()
 
