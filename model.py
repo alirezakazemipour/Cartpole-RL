@@ -60,10 +60,10 @@ class NoisyLayer(nn.Module, ABC):
         self.register_buffer('bias_epsilon', torch.FloatTensor(self.n_outputs))
 
         self.mu_w.data.uniform_(-1 / np.sqrt(self.n_inputs), 1 / np.sqrt(self.n_inputs))
-        self.sigma_w.data.fill_(0.5 / np.sqrt(self.n_inputs))
+        self.sigma_w.data.fill_(0.1 / np.sqrt(self.n_inputs))
 
         self.mu_b.data.uniform_(-1 / np.sqrt(self.n_inputs), 1 / np.sqrt(self.n_inputs))
-        self.sigma_b.data.fill_(0.5 / np.sqrt(self.n_outputs))
+        self.sigma_b.data.fill_(0.1 / np.sqrt(self.n_outputs))
 
         self.reset_noise()
 

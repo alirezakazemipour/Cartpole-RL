@@ -44,7 +44,7 @@ class Agent:
         # self.eval_model.reset()
         state = np.expand_dims(state, axis=0)
         state = from_numpy(state).float().to(self.device)
-        # self.eval_model.reset()
+        self.eval_model.reset()
         return self.eval_model.get_q_value(state).argmax(-1).item()
 
     def hard_update_target_model(self):
