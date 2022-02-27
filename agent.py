@@ -19,6 +19,8 @@ class Agent:
         self.min_epsilon = self.config["min_epsilon"]
         self.decay_rate = self.config["epsilon_decay_rate"]
         self.n_actions = self.config["n_actions"]
+        self.n_embedding = self.config["n_embedding"]
+        self.K = self.config["K"]
         self.n_states = self.config["n_states"]
         self.max_steps = self.config["max_steps"]
         self.max_episodes = self.config["max_episodes"]
@@ -27,8 +29,8 @@ class Agent:
         self.memory = Memory(self.config["memory_size"])
         self.device = device(self.config["device"])
 
-        self.eval_model = Model(self.n_states, self.n_actions).to(self.device)
-        self.target_model = Model(self.n_states, self.n_actions).to(self.device)
+        self.eval_model = Model(self.n_states, self.n_actions, self.n_embedding, self.K).to(self.device)
+        self.target_model = Model(self.n_states, self.n_actions, self.n_embedding, self.K).to(self.device)
         self.target_model.load_state_dict(self.eval_model.state_dict())
 
         self.loss_fn = torch.nn.MSELoss()
@@ -45,7 +47,7 @@ class Agent:
         else:
             state = np.expand_dims(state, axis=0)
             state = from_numpy(state).float().to(self.device)
-            return np.argmax(self.eval_model(state).detach().cpu().numpy())
+            return np.argmax(self.eval_model.get_qvalues(state).detach().cpu().numpy())
 
     def update_train_model(self):
         self.target_model.load_state_dict(self.eval_model.state_dict())
@@ -57,17 +59,33 @@ class Agent:
         batch = self.memory.sample(self.batch_size)
         states, actions, rewards, next_states, dones = self.unpack_batch(batch)
 
-        q_next = self.target_model(next_states).detach().max(dim=-1)[0].view(self.batch_size, 1)
+        with torch.no_grad():
+            tau_primes = torch.rand((self.batch_size, self.config["N_prime"]), device=self.device)
+            next_z = self.target_model((next_states, tau_primes))
+            next_qvalues = self.target_model.get_qvalues(next_states)
+            next_actions = torch.argmax(next_qvalues, dim=-1)
+            next_actions = next_actions[..., None, None].expand(self.batch_size, self.config["N_prime"], 1)
+            next_z = next_z.gather(dim=-1, index=next_actions).squeeze(-1)
+            target_z = rewards + self.config["gamma"] * (1 - dones) * next_z
 
-        q_eval = self.eval_model(states).gather(dim=-1, index=actions.long())
-        q_target = rewards + self.gamma * q_next * (1 - dones)
-        dqn_loss = self.loss_fn(q_eval, q_target)
+        taus = torch.rand((self.batch_size, self.config["N"]), device=self.device)
+        z = self.eval_model((states, taus))
+        actions = actions[..., None].expand(self.batch_size, self.config["N"], 1).long()
+        z = z.gather(dim=-1, index=actions)
+
+        delta = target_z.view(target_z.size(0), 1, target_z.size(-1)) - z
+        hloss = torch.where(torch.abs(delta) <= self.config["kappa"],
+                            0.5 * delta.pow(2),
+                            self.config["kappa"] * (torch.abs(delta) - 0.5 * self.config["kappa"])
+                            )
+        rho = torch.abs(taus[..., None] - (delta.detach() < 0).float()) * hloss / self.config["kappa"]
+        loss = rho.sum(1).mean(1).mean()  # sum over N -> mean over N_prime -> mean over batch
 
         self.optimizer.zero_grad()
-        dqn_loss.backward()
+        loss.backward()
         self.optimizer.step()
 
-        return dqn_loss.detach().cpu().numpy()
+        return loss.detach().cpu().numpy()
 
     def run(self):
 
@@ -106,7 +124,7 @@ class Agent:
                       f"EP_running_reward:{global_running_reward:.3f}| "
                       f"Epsilon:{self.epsilon:.2f}| "
                       f"Memory size:{len(self.memory)}| "
-                      f"EP_Duration:{time.time()-start_time:.3f}| "
+                      f"EP_Duration:{time.time() - start_time:.3f}| "
                       f"{self.to_gb(ram.used):.1f}/{self.to_gb(ram.total):.1f} GB RAM| "
                       f'Time:{datetime.datetime.now().strftime("%H:%M:%S")}')
                 self.save_weights()

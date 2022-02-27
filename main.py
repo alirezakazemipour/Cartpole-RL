@@ -6,7 +6,7 @@ import numpy as np
 import time
 
 config = {
-    "env_name": "CartPole-v0",
+    "env_name": "MountainCar-v0",
     "do_intro": False,
     "do_train": True,
     "lr": 0.0001,
@@ -14,12 +14,17 @@ config = {
     "hard_update_period": 500,
     "memory_size": 10000,
     "gamma": 0.99,
-    "max_episodes": 2000,
+    "max_episodes": 1000,
     "epsilon_decay_rate": 5e-3,
     "min_epsilon": 0.01,
-    "epsilon": 1.0,
+    "epsilon": 1.,
     "print_interval": 50,
-    "device": "cpu"
+    "n_embedding": 64,
+    "kappa": 1,
+    "N": 64,
+    "N_prime": 64,
+    "K": 32,
+    "device": "cuda"
 }
 
 
@@ -29,7 +34,7 @@ num_actions = env.action_space.n
 
 config.update({"n_states": num_states,
                "n_actions": num_actions,
-               "max_steps": env._max_episode_steps})
+               "max_steps": env.spec.max_episode_steps})
 
 print("Number of states:{}".format(num_states))
 print("Number of actions:{}".format(num_actions))
