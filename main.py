@@ -3,23 +3,23 @@ from multiprocessing import Process, Pipe
 import numpy as np
 from brain import Brain
 import gym
-import os
 import time
 from torch.utils.tensorboard import SummaryWriter
 from test_policy import evaluate_policy
 from play import Play
 
-env_name = "LunarLander-v2"
+env_name = "MountainCar-v0"
 test_env = gym.make(env_name)
 n_states = test_env.observation_space.shape[0]
 n_actions = test_env.action_space.n
-n_workers = 8
+n_workers = 2
 device = "cuda"
 iterations = int(4000)
 T = 128
 epochs = 3
 lr = 2.5e-4
 clip_range = 0.1
+gamma = 0.99
 
 
 def run_workers(worker, conn):
@@ -27,8 +27,15 @@ def run_workers(worker, conn):
 
 
 if __name__ == '__main__':
-    brain = Brain(n_states=n_states, n_actions=n_actions, device=device, n_workers=n_workers, epochs=epochs,
-                  n_iters=iterations, epsilon=clip_range, lr=lr)
+    brain = Brain(n_states=n_states,
+                  n_actions=n_actions,
+                  device=device,
+                  n_workers=n_workers,
+                  epochs=epochs,
+                  n_iters=iterations,
+                  epsilon=clip_range,
+                  lr=lr, gamma=gamma
+                  )
     workers = [Worker(i, env_name) for i in range(n_workers)]
     parents = []
     for worker in workers:
@@ -69,9 +76,6 @@ if __name__ == '__main__':
         total_actions = total_actions.reshape(n_workers * T)
         total_loss, c_loss, a_loss, entropy = brain.train(total_states, total_actions, total_rewards,
                                                           total_dones, total_values, next_values)
-        brain.equalize_policies()
-        brain.schedule_lr()
-        brain.schedule_clip_range(iteration)
         episode_reward = evaluate_policy(env_name, brain)
 
         if iteration == 0:
@@ -86,8 +90,7 @@ if __name__ == '__main__':
                   f"Total_loss: {total_loss:.3f}| "
                   f"Entropy: {entropy:.3f}| "
                   f"Iter_duration: {time.time() - start_time:.3f}| "
-                  f"Lr: {brain.scheduler.get_last_lr()}| "
-                  f"Clip_range:{brain.epsilon:.3f}")
+                  )
             brain.save_weights()
 
         with SummaryWriter(env_name + "/logs") as writer:
