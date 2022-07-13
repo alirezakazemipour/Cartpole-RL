@@ -39,11 +39,11 @@ class Brain:
         states = from_numpy(states).float().to(self.device)
         actions = from_numpy(actions).float().to(self.device)
         advs = from_numpy(advs).float().to(self.device)
-        values_target = from_numpy(values).float().to(self.device)
+        values_target = from_numpy(returns).float().to(self.device)
 
         dist, value = self.current_policy(states)
         entropy = dist.entropy().mean()
-        log_prob = self.calculate_log_probs(self.current_policy, states, actions)
+        log_prob = dist.log_prob(actions)
         actor_loss = -(log_prob * advs).mean()
 
         c_loss = self.mse_loss(values_target, value.squeeze(-1))
@@ -56,13 +56,8 @@ class Brain:
     def optimize(self, loss):
         self.optimizer.zero_grad()
         loss.backward()
-        # torch.nn.utils.clip_grad_norm_(self.current_policy.parameters(), 0.5)
+        torch.nn.utils.clip_grad_norm_(self.current_policy.parameters(), 0.5)
         self.optimizer.step()
-
-    @staticmethod
-    def calculate_log_probs(model, states, actions):
-        policy_distribution, _ = model(states)
-        return policy_distribution.log_prob(actions)
 
     def get_returns(self, rewards: np.ndarray, next_values: np.ndarray, dones: np.ndarray, n: int) -> np.ndarray:
         if next_values.shape == ():
