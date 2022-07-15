@@ -15,9 +15,6 @@ downloads/
 eggs/
 .eggs/
 .idea/
-vid/
-CartPole-v0/
-MountainCar-v0/
 lib/
 lib64/
 parts/
@@ -131,6 +128,3 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-
-*.pth
-events.*

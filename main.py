@@ -7,18 +7,19 @@ import time
 from torch.utils.tensorboard import SummaryWriter
 from test_policy import evaluate_policy
 from play import Play
+import os
+import random
+import torch
 
 env_name = "MountainCar-v0"
 test_env = gym.make(env_name)
 n_states = test_env.observation_space.shape[0]
 n_actions = test_env.action_space.n
-n_workers = 6
+n_workers = os.cpu_count()
 device = "cuda"
-iterations = int(4000)
-T = 128
-epochs = 3
+iterations = 4000
+T = 80 // n_workers
 lr = 2.5e-4
-clip_range = 0.1
 gamma = 0.99
 
 
@@ -27,14 +28,18 @@ def run_workers(worker, conn):
 
 
 if __name__ == '__main__':
+    seed = 123
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.random.manual_seed(seed)
+
     brain = Brain(n_states=n_states,
                   n_actions=n_actions,
                   device=device,
                   n_workers=n_workers,
-                  epochs=epochs,
-                  n_iters=iterations,
-                  epsilon=clip_range,
-                  lr=lr, gamma=gamma
+                  lr=lr,
+                  gamma=gamma
                   )
     workers = [Worker(i, env_name) for i in range(n_workers)]
     parents = []
@@ -70,12 +75,16 @@ if __name__ == '__main__':
                 total_dones[worker_id, t] = d
                 next_states[worker_id] = s_
         _, next_values = brain.get_actions_and_values(next_states, batch=True)
-        next_values *= (1 - total_dones[:, -1])
 
         total_states = total_states.reshape((n_workers * T, n_states))
         total_actions = total_actions.reshape(n_workers * T)
-        total_loss, c_loss, a_loss, entropy = brain.train(total_states, total_actions, total_rewards,
-                                                          total_dones, total_values, next_values)
+        total_loss, c_loss, a_loss, entropy = brain.train(total_states,
+                                                          total_actions,
+                                                          total_rewards,
+                                                          total_dones,
+                                                          total_values,
+                                                          next_values
+                                                          )
         episode_reward = evaluate_policy(env_name, brain)
 
         if iteration == 0:
@@ -83,7 +92,7 @@ if __name__ == '__main__':
         else:
             running_reward = 0.99 * running_reward + 0.01 * episode_reward
 
-        if iteration % 50 == 0:
+        if iteration % 100 == 0:
             print(f"Iter: {iteration}| "
                   f"Ep_reward: {episode_reward:.3f}| "
                   f"Running_reward: {running_reward:.3f}| "
@@ -91,15 +100,15 @@ if __name__ == '__main__':
                   f"Entropy: {entropy:.3f}| "
                   f"Iter_duration: {time.time() - start_time:.3f}| "
                   )
-            brain.save_weights()
+            # brain.save_weights()
 
-        with SummaryWriter(env_name + "/logs") as writer:
-            writer.add_scalar("running reward", running_reward, iteration)
-            writer.add_scalar("episode reward", episode_reward, iteration)
-            writer.add_scalar("total loss", total_loss, iteration)
-            writer.add_scalar("actor loss", a_loss, iteration)
-            writer.add_scalar("critic loss", c_loss, iteration)
-            writer.add_scalar("entropy", entropy, iteration)
+        # with SummaryWriter(env_name + "/logs") as writer:
+        #     writer.add_scalar("running reward", running_reward, iteration)
+        #     writer.add_scalar("episode reward", episode_reward, iteration)
+        #     writer.add_scalar("total loss", total_loss, iteration)
+        #     writer.add_scalar("actor loss", a_loss, iteration)
+        #     writer.add_scalar("critic loss", c_loss, iteration)
+        #     writer.add_scalar("entropy", entropy, iteration)
 
     play = Play(test_env, brain)
     play.evaluate()

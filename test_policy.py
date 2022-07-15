@@ -4,6 +4,7 @@ import numpy as np
 
 def evaluate_policy(env_name, agent):
     env = gym.make(env_name)
+    env.seed(123)
     s = env.reset()
     episode_reward = 0
     done = False
