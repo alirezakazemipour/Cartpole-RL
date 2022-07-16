@@ -11,12 +11,12 @@ import os
 import random
 import torch
 
-env_name = "MountainCar-v0"
+env_name = "LunarLander-v2"
 test_env = gym.make(env_name)
 n_states = test_env.observation_space.shape[0]
 n_actions = test_env.action_space.n
-n_workers = os.cpu_count()
-device = "cuda"
+n_workers = 4
+device = "cpu"
 iterations = 4000
 T = 80 // n_workers
 lr = 2.5e-4
@@ -94,8 +94,8 @@ if __name__ == '__main__':
 
         if iteration % 100 == 0:
             print(f"Iter: {iteration}| "
-                  f"Ep_reward: {episode_reward:.3f}| "
-                  f"Running_reward: {running_reward:.3f}| "
+                  f"E_reward: {episode_reward}| "
+                  f"Running_reward: {running_reward:.1f}| "
                   f"Total_loss: {total_loss:.3f}| "
                   f"Entropy: {entropy:.3f}| "
                   f"Iter_duration: {time.time() - start_time:.3f}| "

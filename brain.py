@@ -2,7 +2,8 @@ from model import Model
 import torch
 from torch import from_numpy
 import numpy as np
-from torch.optim.rmsprop import RMSprop
+from kfac import KFAC
+from torch.distributions import Normal
 
 
 class Brain:
@@ -15,8 +16,7 @@ class Brain:
         self.gamma = gamma
 
         self.model = Model(self.n_states, self.n_actions).to(self.device)
-
-        self.optimizer = RMSprop(self.model.parameters(), lr=self.lr, alpha=0.99, eps=1e-5)
+        self.optimizer = KFAC(self.model, lr=lr)
         self.mse_loss = torch.nn.MSELoss()
 
     def get_actions_and_values(self, state, batch=False):
@@ -41,8 +41,19 @@ class Brain:
         dist, value = self.model(states)
         entropy = dist.entropy().mean()
         log_prob = dist.log_prob(actions)
-        a_loss = -(log_prob * advs).mean()
 
+        self.optimizer.zero_grad()
+        a_fisher_loss = -log_prob.mean()  # CELoss
+        v_dist = Normal(value.detach().squeeze(-1), 1)
+        v_samples = v_dist.sample()
+        c_fisher_loss = -self.mse_loss(value.squeeze(-1), v_samples)
+        fisher_loss = a_fisher_loss + c_fisher_loss
+        self.optimizer.fisher_backprop = True
+        fisher_loss.backward(retain_graph=True)
+        self.optimizer.fisher_backprop = False
+        self.optimizer.zero_grad()
+
+        a_loss = -(log_prob * advs).mean()
         c_loss = self.mse_loss(values_target, value.squeeze(-1))
 
         total_loss = 0.5 * c_loss + a_loss - 0.01 * entropy
@@ -50,9 +61,8 @@ class Brain:
         return total_loss.item(), c_loss.item(), a_loss.item(), entropy.item()
 
     def optimize(self, loss):
-        self.optimizer.zero_grad()
+        # self.optimizer.zero_grad()
         loss.backward()
-        # torch.nn.utils.clip_grad_norm_(self.model.parameters(), 0.5)
         self.optimizer.step()
 
     def get_returns(self, rewards: np.ndarray, next_values: np.ndarray, dones: np.ndarray, n: int) -> np.ndarray:
