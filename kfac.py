@@ -8,9 +8,9 @@ import math
 class KFAC(optim.Optimizer):
     def __init__(self,
                  model: torch.nn.Module,
-                 lr,
+                 lr=0.25,
                  weight_decay=0,
-                 damping=1e-3,
+                 damping=1e-2,
                  momentum=0.9,
                  eps=0.99,
                  Ts=1,  # noqa
@@ -59,25 +59,25 @@ class KFAC(optim.Optimizer):
             # if isinstance(layer, torch.nn.Conv2d):
             #     a /= spatial_size
 
-            aa = a.t() @ a / batch_size
+            aa = a.t() @ (a / batch_size)
 
             if self._k == 0:
                 self._aa_hat[layer] = aa.clone()
 
             polyak_avg(aa, self._aa_hat[layer], self.eps)
 
-    def _save_gg(self, layer, grad_forwardprop, grad_backprop):  # noqa
+    def _save_gg(self, layer, delta, grad_backprop):  # noqa
         if self.fisher_backprop:
-            g = grad_backprop[0]
-            batch_size = g.size(0)
+            ds = grad_backprop[0]
+            batch_size = ds.size(0)
             if self._k % self.Ts == 0:
                 if isinstance(layer, torch.nn.Conv2d):
-                    ow, oh = g.shape[-2:]
-                    g = g.transpose_(1, 2).transpose_(2, 3).contiguous()
-                    g = g.view(-1, g.size(-1)) * ow * oh
+                    ow, oh = ds.shape[-2:]
+                    ds = ds.transpose_(1, 2).transpose_(2, 3).contiguous()
+                    ds = ds.view(-1, ds.size(-1)) * ow * oh
 
-                g *= batch_size
-                gg = g.t() @ (g / batch_size)
+                ds = ds * batch_size
+                gg = ds.t() @ (ds / batch_size)
 
                 if self._k == 0:
                     self._gg_hat[layer] = gg.clone()
@@ -87,8 +87,8 @@ class KFAC(optim.Optimizer):
     def _update_inverses(self, l):
         self._eig_a[l], self._Q_a[l] = torch.linalg.eigh(self._aa_hat[l], UPLO='U')
         self._eig_g[l], self._Q_g[l] = torch.linalg.eigh(self._gg_hat[l], UPLO='U')
-        self._eig_a[l] *= (self._eig_a[l] > 1e-10).float()
-        self._eig_g[l] *= (self._eig_g[l] > 1e-10).float()
+        self._eig_a[l] *= (self._eig_a[l] > 1e-6).float()
+        self._eig_g[l] *= (self._eig_g[l] > 1e-6).float()
 
     def step(self, closure=None):
         if self.weight_decay > 0:
@@ -97,7 +97,6 @@ class KFAC(optim.Optimizer):
 
         updates = {}
         for layer in self._trainable_layers:
-
             if self._k % self.Tf == 0:
                 self._update_inverses(layer)
 
@@ -109,7 +108,7 @@ class KFAC(optim.Optimizer):
                 grad = torch.cat([grad, layer.bias.grad.data.view(-1, 1)], 1)
 
             V1 = self._Q_g[layer].t() @ grad @ self._Q_a[layer]  # noqa
-            V2 = V1 / (self._eig_g[layer].unsqueeze(-1) @ self._eig_a[layer].unsqueeze(0) + (
+            V2 = V1 / (self._eig_g[layer].unsqueeze(-1) @ self._eig_a[layer].unsqueeze(0) + ( # noqa
                     self.damping + self.weight_decay)
                        )
             delta_h_hat = self._Q_g[layer] @ V2 @ self._Q_a[layer].t()
@@ -123,14 +122,14 @@ class KFAC(optim.Optimizer):
 
             updates[layer] = delta_h_hat
 
-        second_taylor_expand_term = 0
+        second_taylor_expans_term = 0
         for layer in self._trainable_layers:
             v = updates[layer]
-            second_taylor_expand_term += (v[0] * layer.weight.grad.data * self.lr ** 2).sum()
+            second_taylor_expans_term += (v[0] * layer.weight.grad.data * self.lr * self.lr).sum()
             if layer.bias is not None:
-                second_taylor_expand_term += (v[1] * layer.bias.grad.data * self.lr ** 2).sum()
+                second_taylor_expans_term += (v[1] * layer.bias.grad.data * self.lr * self.lr).sum()
 
-        nu = min(self.max_lr, math.sqrt(2 * self.trust_region / (second_taylor_expand_term + 1e-6)))
+        nu = min(self.max_lr, math.sqrt(2 * self.trust_region / (second_taylor_expans_term + 1e-6)))
 
         for layer in self._trainable_layers:
             v = updates[layer][0]

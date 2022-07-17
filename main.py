@@ -15,8 +15,8 @@ env_name = "LunarLander-v2"
 test_env = gym.make(env_name)
 n_states = test_env.observation_space.shape[0]
 n_actions = test_env.action_space.n
-n_workers = 4
-device = "cpu"
+n_workers = 3
+device = "cuda"
 iterations = 4000
 T = 80 // n_workers
 lr = 2.5e-4
@@ -28,7 +28,7 @@ def run_workers(worker, conn):
 
 
 if __name__ == '__main__':
-    seed = 123
+    seed = 256
     os.environ["PYTHONHASHSEED"] = str(seed)
     np.random.seed(seed)
     random.seed(seed)
@@ -94,9 +94,9 @@ if __name__ == '__main__':
 
         if iteration % 100 == 0:
             print(f"Iter: {iteration}| "
-                  f"E_reward: {episode_reward}| "
+                  f"E_reward: {episode_reward:.1f}| "
                   f"Running_reward: {running_reward:.1f}| "
-                  f"Total_loss: {total_loss:.3f}| "
+                  f"Total_loss: {total_loss:.2f}| "
                   f"Entropy: {entropy:.3f}| "
                   f"Iter_duration: {time.time() - start_time:.3f}| "
                   )

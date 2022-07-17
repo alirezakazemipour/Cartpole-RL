@@ -16,7 +16,7 @@ class Brain:
         self.gamma = gamma
 
         self.model = Model(self.n_states, self.n_actions).to(self.device)
-        self.optimizer = KFAC(self.model, lr=lr)
+        self.optimizer = KFAC(self.model)
         self.mse_loss = torch.nn.MSELoss()
 
     def get_actions_and_values(self, state, batch=False):
