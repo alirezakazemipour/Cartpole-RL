@@ -1,12 +1,13 @@
-import gym
+import gymnasium as gym
 from agent import Agent
 from play import Play
 import matplotlib.pyplot as plt
 import numpy as np
 import time
+from wrappers import OneHotEnv
 
 config = {
-    "env_name": "CartPole-v0",
+    "env_name": "FrozenLake-v1",
     "do_intro": False,
     "do_train": True,
     "lr": 0.0001,
@@ -14,8 +15,8 @@ config = {
     "hard_update_period": 500,
     "memory_size": 10000,
     "gamma": 0.99,
-    "max_episodes": 2000,
-    "epsilon_decay_rate": 5e-3,
+    "max_episodes": 10000,
+    "epsilon_decay_rate": 5e-4,
     "min_epsilon": 0.01,
     "epsilon": 1.0,
     "print_interval": 50,
@@ -23,20 +24,22 @@ config = {
 }
 
 
-env = gym.make(config["env_name"])
-num_states = env.observation_space.shape[0]
+env = gym.make(config["env_name"], is_slippery=False)
+env = OneHotEnv(env)
+num_states = env.observation_space.n
 num_actions = env.action_space.n
 
 config.update({"n_states": num_states,
                "n_actions": num_actions,
-               "max_steps": env._max_episode_steps})
+               "max_steps": env.spec.max_episode_steps})
 
 print("Number of states:{}".format(num_states))
 print("Number of actions:{}".format(num_actions))
 
 
 def test_env_working():
-    test_env = gym.make(config["env_name"])
+    test_env = gym.make(config["env_name"], render_mode="human")
+    test_env = OneHotEnv(test_env)
     test_env.reset()
     for _ in range(test_env._max_episode_steps):
         test_env.render()

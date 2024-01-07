@@ -75,15 +75,15 @@ class Agent:
         global_running_reward = 0
         for episode in range(1, 1 + self.max_episodes):
             start_time = time.time()
-            state = self.env.reset()
+            state, _ = self.env.reset()
             episode_reward = 0
             for step in range(1, 1 + self.max_steps):
                 action = self.choose_action(state)
-                next_state, reward, done, _, = self.env.step(action)
+                next_state, reward, term, trunc, _ = self.env.step(action)
                 episode_reward += reward
-                self.store(state, reward, done, action, next_state)
+                self.store(state, reward, term, action, next_state)
                 dqn_loss = self.train()
-                if done:
+                if term or trunc:
                     break
                 state = next_state
 
@@ -101,12 +101,12 @@ class Agent:
             ram = psutil.virtual_memory()
             if episode % self.config["print_interval"] == 0:
                 print(f"EP:{episode}| "
-                      f"DQN_loss:{dqn_loss:.2f}| "
-                      f"EP_reward:{episode_reward}| "
-                      f"EP_running_reward:{global_running_reward:.3f}| "
-                      f"Epsilon:{self.epsilon:.2f}| "
+                      f"loss:{dqn_loss:.2f}| "
+                      f"reward:{episode_reward}| "
+                      f"running_reward:{global_running_reward:.3f}| "
+                      f"Eps:{self.epsilon:.2f}| "
                       f"Memory size:{len(self.memory)}| "
-                      f"EP_Duration:{time.time()-start_time:.3f}| "
+                      f"EP_Duration:{time.time() - start_time:.3f}| "
                       f"{self.to_gb(ram.used):.1f}/{self.to_gb(ram.total):.1f} GB RAM| "
                       f'Time:{datetime.datetime.now().strftime("%H:%M:%S")}')
                 self.save_weights()
