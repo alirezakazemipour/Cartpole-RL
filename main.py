@@ -9,10 +9,12 @@ from play import Play
 import os
 import random
 import torch
+from wrappers import OneHotEnv
 
-env_name = "Acrobot-v1"
-test_env = gym.make(env_name)
-n_states = test_env.observation_space.shape[0]
+env_name = "FrozenLake-v1"
+test_env = gym.make(env_name, is_slippery=False)
+test_env = OneHotEnv(test_env)
+n_states = test_env.observation_space.n
 n_actions = test_env.action_space.n
 n_workers = 8
 device = "cpu"
@@ -84,7 +86,7 @@ if __name__ == '__main__':
                                                           total_values,
                                                           next_values
                                                           )
-        episode_reward = evaluate_policy(env_name, brain)
+        episode_reward = evaluate_policy(env_name, brain, seed, iteration)
 
         if iteration == 0:
             running_reward = episode_reward
