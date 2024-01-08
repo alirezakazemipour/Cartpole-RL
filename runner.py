@@ -1,5 +1,9 @@
-import gym
+import gymnasium as gym
 import numpy as np
+
+
+def cantor_pairing(x: int, y: int) -> int:
+    return int(0.5 * (x + y) * (x + y + 1) + y)
 
 
 class Worker:
@@ -8,6 +12,7 @@ class Worker:
         self.env_name = env_name
         self.env = None
         self._state = None
+        self.ep = 0
 
     def __str__(self):
         return str(self.id)
@@ -16,19 +21,20 @@ class Worker:
         self.env.render()
 
     def reset(self):
-        self._state = self.env.reset()
+        ep_seed = cantor_pairing(self.id, self.ep)
+        self._state, _ = self.env.reset(seed=ep_seed)
 
     def step(self, conn):
         self.env = gym.make(self.env_name)
-        self.env.seed(self.id)
         self._state = None
         self.reset()
         while True:
             conn.send(self._state)
             action = conn.recv()
-            next_state, r, d, _ = self.env.step(action)
+            next_state, r, d, t, _ = self.env.step(action)
             # self.render()
             self._state = next_state
-            if d:
+            if d or t:
                 self.reset()
+                self.ep += 1
             conn.send((next_state, r, d, _))

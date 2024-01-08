@@ -16,7 +16,7 @@ class Brain:
 
         self.model = Model(self.n_states, self.n_actions).to(self.device)
 
-        self.optimizer = RMSprop(self.model.parameters(), lr=self.lr, alpha=0.99, eps=1e-5)
+        self.optimizer = torch.optim.RMSprop(self.model.parameters(), lr=lr, eps=1e-5)
         self.mse_loss = torch.nn.MSELoss()
 
     def get_actions_and_values(self, state, batch=False):
@@ -43,7 +43,7 @@ class Brain:
         log_prob = dist.log_prob(actions)
         a_loss = -(log_prob * advs).mean()
 
-        c_loss = self.mse_loss(values_target, value.squeeze(-1))
+        c_loss = self.mse_loss(value.squeeze(-1), values_target)
 
         total_loss = 0.5 * c_loss + a_loss - 0.01 * entropy
         self.optimize(total_loss)
@@ -52,7 +52,7 @@ class Brain:
     def optimize(self, loss):
         self.optimizer.zero_grad()
         loss.backward()
-        # torch.nn.utils.clip_grad_norm_(self.model.parameters(), 0.5)
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 0.5)
         self.optimizer.step()
 
     def get_returns(self, rewards: np.ndarray, next_values: np.ndarray, dones: np.ndarray, n: int) -> np.ndarray:

@@ -2,24 +2,23 @@ from runner import Worker
 from multiprocessing import Process, Pipe
 import numpy as np
 from brain import Brain
-import gym
+import gymnasium as gym
 import time
-from torch.utils.tensorboard import SummaryWriter
 from test_policy import evaluate_policy
 from play import Play
 import os
 import random
 import torch
 
-env_name = "MountainCar-v0"
+env_name = "Acrobot-v1"
 test_env = gym.make(env_name)
 n_states = test_env.observation_space.shape[0]
 n_actions = test_env.action_space.n
-n_workers = os.cpu_count()
-device = "cuda"
-iterations = 4000
-T = 80 // n_workers
-lr = 2.5e-4
+n_workers = 8
+device = "cpu"
+iterations = 8000
+T = 5
+lr = 0.0007
 gamma = 0.99
 
 
@@ -32,7 +31,7 @@ if __name__ == '__main__':
     os.environ["PYTHONHASHSEED"] = str(seed)
     np.random.seed(seed)
     random.seed(seed)
-    torch.random.manual_seed(seed)
+    torch.manual_seed(seed)
 
     brain = Brain(n_states=n_states,
                   n_actions=n_actions,
@@ -41,7 +40,7 @@ if __name__ == '__main__':
                   lr=lr,
                   gamma=gamma
                   )
-    workers = [Worker(i, env_name) for i in range(n_workers)]
+    workers = [Worker(i + seed, env_name) for i in range(n_workers)]
     parents = []
     for worker in workers:
         parent_conn, child_conn = Pipe()

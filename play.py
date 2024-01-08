@@ -1,8 +1,7 @@
 import torch
 from torch import device
-import gym
+import gymnasium as gym
 import time
-
 
 
 class Play:

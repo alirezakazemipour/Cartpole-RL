@@ -29,5 +29,5 @@ class Model(nn.Module):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         value = self.value(x)
-        dist = Categorical(F.softmax(self.policy(x), dim=1))
+        dist = Categorical(F.softmax(self.policy(x), dim=-1))
         return dist, value
