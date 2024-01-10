@@ -11,12 +11,12 @@ import random
 import torch
 from wrappers import OneHotEnv
 
-env_name = "FrozenLake-v1"
-test_env = gym.make(env_name, is_slippery=False)
+env_name = "Taxi-v3"
+test_env = gym.make(env_name)
 test_env = OneHotEnv(test_env)
 n_states = test_env.observation_space.n
 n_actions = test_env.action_space.n
-n_workers = 8
+n_workers = 3
 device = "cpu"
 iterations = 8000
 T = 5

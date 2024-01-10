@@ -26,7 +26,7 @@ class Worker:
         self._state, _ = self.env.reset(seed=ep_seed)
 
     def step(self, conn):
-        self.env = gym.make(self.env_name, is_slippery=False)
+        self.env = gym.make(self.env_name)
         self.env = OneHotEnv(self.env)
         self._state = None
         self.reset()

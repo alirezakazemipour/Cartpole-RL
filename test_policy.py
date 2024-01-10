@@ -8,7 +8,7 @@ def cantor_pairing(x: int, y: int) -> int:
 
 
 def evaluate_policy(env_name, agent, seed, iteration):
-    env = gym.make(env_name, is_slippery=False)
+    env = gym.make(env_name)
     env = OneHotEnv(env)
     seed = cantor_pairing(seed, iteration)
     s, _ = env.reset(seed=seed)
