@@ -1,6 +1,6 @@
 import gymnasium as gym
 import numpy as np
-from wrappers import OneHotEnv
+# from wrappers import OneHotEnv
 
 
 def cantor_pairing(x: int, y: int) -> int:
@@ -23,11 +23,11 @@ class Worker:
 
     def reset(self):
         ep_seed = cantor_pairing(self.id, self.ep)
-        self._state, _ = self.env.reset(seed=ep_seed)
+        self._state, _ = self.env.reset(seed=0)
 
     def step(self, conn):
         self.env = gym.make(self.env_name)
-        self.env = OneHotEnv(self.env)
+        # self.env = OneHotEnv(self.env)
         self._state = None
         self.reset()
         while True:
@@ -37,6 +37,6 @@ class Worker:
             # self.render()
             self._state = next_state
             if d or t:
-                self.reset()
                 self.ep += 1
+                self.reset()
             conn.send((next_state, r, d, _))

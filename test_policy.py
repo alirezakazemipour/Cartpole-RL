@@ -9,9 +9,9 @@ def cantor_pairing(x: int, y: int) -> int:
 
 def evaluate_policy(env_name, agent, seed, iteration):
     env = gym.make(env_name)
-    env = OneHotEnv(env)
+    # env = OneHotEnv(env)
     seed = cantor_pairing(seed, iteration)
-    s, _ = env.reset(seed=seed)
+    s, _ = env.reset(seed=0)
     episode_reward = 0
     done, t = False, False
     while not (done or t):

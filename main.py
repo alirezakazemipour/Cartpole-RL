@@ -9,18 +9,18 @@ from play import Play
 import os
 import random
 import torch
-from wrappers import OneHotEnv
+# from wrappers import OneHotEnv
 
 env_name = "Taxi-v3"
 test_env = gym.make(env_name)
-test_env = OneHotEnv(test_env)
+# test_env = OneHotEnv(test_env)
 n_states = test_env.observation_space.n
 n_actions = test_env.action_space.n
-n_workers = 3
+n_workers = 4
 device = "cpu"
 iterations = 8000
 T = 5
-lr = 0.0007
+lr = 0.0001
 gamma = 0.99
 
 
@@ -53,13 +53,13 @@ if __name__ == '__main__':
     running_reward = 0
     for iteration in range(iterations):
         start_time = time.time()
-        total_states = np.zeros((n_workers, T, n_states))
+        total_states = np.zeros((n_workers, T))
         total_actions = np.zeros((n_workers, T))
         total_rewards = np.zeros((n_workers, T))
         total_dones = np.zeros((n_workers, T))
         total_values = np.zeros((n_workers, T))
         next_values = np.zeros(n_workers)
-        next_states = np.zeros((n_workers, n_states))
+        next_states = np.zeros((n_workers,))
 
         for t in range(T):
             for worker_id, parent in enumerate(parents):
@@ -77,7 +77,7 @@ if __name__ == '__main__':
                 next_states[worker_id] = s_
         _, next_values = brain.get_actions_and_values(next_states, batch=True)
 
-        total_states = total_states.reshape((n_workers * T, n_states))
+        total_states = total_states.reshape((n_workers * T,))
         total_actions = total_actions.reshape(n_workers * T)
         total_loss, c_loss, a_loss, entropy = brain.train(total_states,
                                                           total_actions,
