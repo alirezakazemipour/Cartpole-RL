@@ -6,21 +6,22 @@ from torch.optim.rmsprop import RMSprop
 
 
 class Brain:
-    def __init__(self, n_states, n_actions, device, n_workers, lr, gamma):
+    def __init__(self, n_states, n_actions, device, n_workers, lr, gamma, lam, T):
         self.n_states = n_states
         self.n_actions = n_actions
         self.device = torch.device(device)
         self.n_workers = n_workers
         self.lr = lr
         self.gamma = gamma
-        self.lam = 0.99
+        self.lam = lam
+        self.T = T
 
         self.model = Model(self.n_states, self.n_actions).to(self.device)
 
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
         self.mse_loss = torch.nn.MSELoss()
 
-    def get_actions_and_values(self, state, batch=False):
+    def get_acts_and_vals(self, state, batch=False):
         if not batch:
             state = np.expand_dims(state, 0)
         state = from_numpy(state).long().to(self.device)
@@ -35,7 +36,7 @@ class Brain:
         advs = returns - values
 
         states = from_numpy(states).long().to(self.device)
-        actions = from_numpy(actions).float().to(self.device)
+        actions = from_numpy(actions).long().to(self.device)
         advs = from_numpy(advs).float().to(self.device)
         values_target = from_numpy(returns).float().to(self.device)
 
@@ -46,7 +47,7 @@ class Brain:
 
         c_loss = self.mse_loss(values_target, value.squeeze(-1))
 
-        total_loss = 0.5*c_loss + a_loss - 0.001 * entropy
+        total_loss = 0.5 * c_loss + a_loss - 0.001 * entropy
         self.optimize(total_loss)
         return total_loss.item(), c_loss.item(), a_loss.item(), entropy.item()
 
@@ -56,25 +57,27 @@ class Brain:
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 0.5)
         self.optimizer.step()
 
-    def get_returns(self, rewards: np.ndarray, values, next_values: np.ndarray, dones: np.ndarray,
-                    n: int) -> np.ndarray:
-        if n == 1:
+    def get_returns(self, rews: np.ndarray,
+                    values,
+                    next_values: np.ndarray,
+                    dones: np.ndarray,
+                    n_workers: int
+                    ) -> np.ndarray:
+        if n_workers == 1:
             next_values = next_values[None]
 
         lam = self.lam
-        returns = [[] for _ in range(n)]
-        extended_values = np.zeros((n, 5 + 1))
-        for worker in range(n):
-            extended_values[worker] = np.append(values[worker], next_values[worker])
+        rets = [[] for _ in range(n_workers)]
+        exten_values = np.zeros((n_workers, self.T + 1))
+        for w in range(n_workers):
+            exten_values[w] = np.append(values[w], next_values[w])
             gae = 0
-            for step in reversed(range(len(rewards[worker]))):
-                delta = rewards[worker][step] + self.gamma * (extended_values[worker][step + 1]) * (
-                            1 - dones[worker][step]) \
-                        - extended_values[worker][step]
-                gae = delta + self.gamma * lam * (1 - dones[worker][step]) * gae
-                returns[worker].insert(0, gae + extended_values[worker][step])
+            for t in reversed(range(len(rews[w]))):
+                delta = rews[w][t] + self.gamma * (exten_values[w][t + 1]) * (1 - dones[w][t]) - exten_values[w][t]
+                gae = delta + self.gamma * lam * (1 - dones[w][t]) * gae
+                rets[w].insert(0, gae + exten_values[w][t])
 
-        return np.concatenate(returns)
+        return np.concatenate(rets)
 
     def save_weights(self):
         torch.save(self.model.state_dict(), "weights.pth")

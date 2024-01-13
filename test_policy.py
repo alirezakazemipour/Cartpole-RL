@@ -11,11 +11,11 @@ def evaluate_policy(env_name, agent, seed, iteration):
     env = gym.make(env_name)
     # env = OneHotEnv(env)
     seed = cantor_pairing(seed, iteration)
-    s, _ = env.reset(seed=0)
+    s, _ = env.reset(seed=seed)
     episode_reward = 0
     done, t = False, False
     while not (done or t):
-        action, _ = agent.get_actions_and_values(s)
+        action, _ = agent.get_acts_and_vals(s)
         next_s, r, done, t, _ = env.step(action[0])
         s = next_s
         episode_reward += r

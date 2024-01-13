@@ -8,12 +8,13 @@ def cantor_pairing(x: int, y: int) -> int:
 
 
 class Worker:
-    def __init__(self, id, env_name):
+    def __init__(self, id, env_name, seed):
         self.id = id
         self.env_name = env_name
         self.env = None
         self._state = None
         self.ep = 0
+        self.seed = seed
 
     def __str__(self):
         return str(self.id)
@@ -22,10 +23,11 @@ class Worker:
         self.env.render()
 
     def reset(self):
-        ep_seed = cantor_pairing(self.id, self.ep)
-        self._state, _ = self.env.reset(seed=0)
+        ep_seed = cantor_pairing(self.id + self.seed, self.ep)
+        self._state, _ = self.env.reset(seed=ep_seed)
 
     def step(self, conn):
+        print(f'W: {self.id} started')
         self.env = gym.make(self.env_name)
         # self.env = OneHotEnv(self.env)
         self._state = None
@@ -34,9 +36,11 @@ class Worker:
             conn.send(self._state)
             action = conn.recv()
             next_state, r, d, t, _ = self.env.step(action)
+            # if r == 20:
+            #     print(r)
             # self.render()
+            conn.send((next_state, r, d, _))
             self._state = next_state
             if d or t:
                 self.ep += 1
                 self.reset()
-            conn.send((next_state, r, d, _))

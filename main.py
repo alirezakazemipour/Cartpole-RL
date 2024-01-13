@@ -9,19 +9,21 @@ from play import Play
 import os
 import random
 import torch
+from tqdm import tqdm
+
 # from wrappers import OneHotEnv
 
 env_name = "Taxi-v3"
 test_env = gym.make(env_name)
-# test_env = OneHotEnv(test_env)
 n_states = test_env.observation_space.n
 n_actions = test_env.action_space.n
-n_workers = 4
+n_workers = 16
 device = "cpu"
-iterations = 8000
+iterations = 20000
 T = 5
 lr = 0.0001
 gamma = 0.99
+lam = 0.99
 
 
 def run_workers(worker, conn):
@@ -40,9 +42,11 @@ if __name__ == '__main__':
                   device=device,
                   n_workers=n_workers,
                   lr=lr,
-                  gamma=gamma
+                  gamma=gamma,
+                  lam=lam,
+                  T=T
                   )
-    workers = [Worker(i + seed, env_name) for i in range(n_workers)]
+    workers = [Worker(i, env_name, seed) for i in range(n_workers)]
     parents = []
     for worker in workers:
         parent_conn, child_conn = Pipe()
@@ -51,39 +55,39 @@ if __name__ == '__main__':
         p.start()
 
     running_reward = 0
-    for iteration in range(iterations):
+    for iteration in tqdm(range(iterations)):
         start_time = time.time()
-        total_states = np.zeros((n_workers, T))
-        total_actions = np.zeros((n_workers, T))
-        total_rewards = np.zeros((n_workers, T))
-        total_dones = np.zeros((n_workers, T))
-        total_values = np.zeros((n_workers, T))
+        tot_states = np.zeros((n_workers, T))
+        tot_actions = np.zeros((n_workers, T))
+        tot_rewards = np.zeros((n_workers, T))
+        tot_dones = np.zeros((n_workers, T))
+        tot_values = np.zeros((n_workers, T))
         next_values = np.zeros(n_workers)
         next_states = np.zeros((n_workers,))
 
         for t in range(T):
             for worker_id, parent in enumerate(parents):
                 s = parent.recv()
-                total_states[worker_id, t] = s
+                tot_states[worker_id, t] = s
 
-            total_actions[:, t], total_values[:, t] = brain.get_actions_and_values(total_states[:, t], batch=True)
-            for parent, a in zip(parents, total_actions[:, t]):
-                parent.send(int(a))
+            tot_actions[:, t], tot_values[:, t] = brain.get_acts_and_vals(tot_states[:, t], batch=True)
+            for p, a in zip(parents, tot_actions[:, t]):
+                p.send(int(a))
 
-            for worker_id, parent in enumerate(parents):
-                s_, r, d, _ = parent.recv()
-                total_rewards[worker_id, t] = r
-                total_dones[worker_id, t] = d
+            for worker_id, p in enumerate(parents):
+                s_, r, d, _ = p.recv()
+                tot_rewards[worker_id, t] = np.sign(r)
+                tot_dones[worker_id, t] = d
                 next_states[worker_id] = s_
-        _, next_values = brain.get_actions_and_values(next_states, batch=True)
+        _, next_values = brain.get_acts_and_vals(next_states, batch=True)
 
-        total_states = total_states.reshape((n_workers * T,))
-        total_actions = total_actions.reshape(n_workers * T)
-        total_loss, c_loss, a_loss, entropy = brain.train(total_states,
-                                                          total_actions,
-                                                          total_rewards,
-                                                          total_dones,
-                                                          total_values,
+        tot_states = tot_states.reshape((n_workers * T,))
+        tot_actions = tot_actions.reshape(n_workers * T)
+        total_loss, c_loss, a_loss, entropy = brain.train(tot_states,
+                                                          tot_actions,
+                                                          tot_rewards,
+                                                          tot_dones,
+                                                          tot_values,
                                                           next_values
                                                           )
         episode_reward = evaluate_policy(env_name, brain, seed, iteration)
@@ -93,13 +97,13 @@ if __name__ == '__main__':
         else:
             running_reward = 0.99 * running_reward + 0.01 * episode_reward
 
-        if iteration % 100 == 0:
+        if iteration % 1000 == 0:
             print(f"Iter: {iteration}| "
-                  f"Ep_reward: {episode_reward:.3f}| "
-                  f"Running_reward: {running_reward:.3f}| "
-                  f"Total_loss: {total_loss:.3f}| "
-                  f"Entropy: {entropy:.3f}| "
-                  f"Iter_duration: {time.time() - start_time:.3f}| "
+                  f"Ep_reward: {episode_reward:.2f}| "
+                  f"Running_reward: {running_reward:.2f}| "
+                  f"Total_loss: {total_loss:.2f}| "
+                  f"Entropy: {entropy:.2f}| "
+                  f"Iter_duration: {time.time() - start_time:.2f}| "
                   )
             # brain.save_weights()
 
