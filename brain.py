@@ -63,21 +63,18 @@ class Brain:
                     dones: np.ndarray,
                     n_workers: int
                     ) -> np.ndarray:
-        if n_workers == 1:
+
+        if next_values.shape == ():
             next_values = next_values[None]
 
-        lam = self.lam
-        rets = [[] for _ in range(n_workers)]
-        exten_values = np.zeros((n_workers, self.T + 1))
-        for w in range(n_workers):
-            exten_values[w] = np.append(values[w], next_values[w])
-            gae = 0
-            for t in reversed(range(len(rews[w]))):
-                delta = rews[w][t] + self.gamma * (exten_values[w][t + 1]) * (1 - dones[w][t]) - exten_values[w][t]
-                gae = delta + self.gamma * lam * (1 - dones[w][t]) * gae
-                rets[w].insert(0, gae + exten_values[w][t])
+        returns = [[] for _ in range(n_workers)]
+        for worker in range(n_workers):
+            R = next_values[worker]
+            for step in reversed(range(len(rews[worker]))):
+                R = rews[worker][step] + self.gamma * R * (1 - dones[worker][step])
+                returns[worker].insert(0, R)
 
-        return np.concatenate(rets)
+        return np.hstack(returns)
 
     def save_weights(self):
         torch.save(self.model.state_dict(), "weights.pth")
